@@ -47,9 +47,9 @@ const CONFIG = {
     API_KEY: GLOBAL_API_KEY,
     ENDPOINT: "/EVALUATION2026/api/carts"
   },
-  STOCKS: {
+  STOCK_AVAILABLES: {
     API_KEY: GLOBAL_API_KEY,
-    ENDPOINT: "/EVALUATION2026/api/stocks"
+    ENDPOINT: "/EVALUATION2026/api/stock_availables"
   }
 };
 
@@ -60,6 +60,7 @@ const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_
 const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
 const FRONT_OFFICE_CHECKOUT_ENDPOINT = "/EVALUATION2026/tools/newapp_checkout.php";
 const FRONT_OFFICE_CHECKOUT_CONTEXT_ENDPOINT = "/EVALUATION2026/tools/newapp_checkout_context.php";
+const FRONT_OFFICE_AUTH_ENDPOINT = "/EVALUATION2026/tools/newapp_front_auth.php";
 
 // 2. UTILITAIRES DE PARSING
 export const parseFileContent = (content, fileName) => {
@@ -544,6 +545,34 @@ export const getFrontOfficeCheckoutContext = async () => {
     paymentMethods: Array.isArray(payload.paymentMethods) ? payload.paymentMethods : [],
     paymentMethod: String(payload.paymentMethod || "")
   };
+};
+
+export const frontOfficeRegister = async ({ firstname, lastname, email, password }) => {
+  const response = await axios.post(FRONT_OFFICE_AUTH_ENDPOINT, {
+    action: "register",
+    firstname,
+    lastname,
+    email,
+    password
+  });
+  const payload = response?.data || {};
+  if (!payload.ok || !payload.customer) {
+    throw new Error(payload.message || "Inscription impossible.");
+  }
+  return payload.customer;
+};
+
+export const frontOfficeLogin = async ({ email, password }) => {
+  const response = await axios.post(FRONT_OFFICE_AUTH_ENDPOINT, {
+    action: "login",
+    email,
+    password
+  });
+  const payload = response?.data || {};
+  if (!payload.ok || !payload.customer) {
+    throw new Error(payload.message || "Connexion impossible.");
+  }
+  return payload.customer;
 };
 
 // 3. ACTIONS API GÉNÉRIQUES

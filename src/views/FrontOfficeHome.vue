@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import FrontOfficeTopSidebar from '../components/front-office/FrontOfficeTopSidebar.vue'
 import {
   buildProductImageUrl,
   extractName,
@@ -9,9 +10,16 @@ import {
 
 const loading = ref(true)
 const error = ref('')
-const search = ref('')
+
+// Critères de recherche
+const searchName = ref('')
+const searchCategory = ref('')
+const searchMinPrice = ref('')
+const searchMaxPrice = ref('')
+
 const cartCount = ref(0)
 const products = ref([])
+const categories = ref([])
 
 const readTextValue = (value) => {
   if (value && typeof value === 'object') {
@@ -38,6 +46,23 @@ const readCartCount = async () => {
   }
 }
 
+const loadCategories = async () => {
+  try {
+    const response = await prestashopApi.getAll('CATEGORIES')
+    const rawCategories = response?.prestashop?.categories?.category
+    const normalizedCategories = Array.isArray(rawCategories) ? rawCategories : rawCategories ? [rawCategories] : []
+
+    categories.value = normalizedCategories
+      .map((cat) => ({
+        id: String(readTextValue(cat.id)),
+        name: extractName(cat)
+      }))
+      .filter((c) => c.name && c.id !== '1' && c.id !== '2') // Souvent 1 et 2 sont root/home
+  } catch (err) {
+    console.error("Impossible de charger les catégories", err)
+  }
+}
+
 const loadProducts = async () => {
   try {
     loading.value = true
@@ -47,16 +72,28 @@ const loadProducts = async () => {
     const rawProducts = response?.prestashop?.products?.product
     const normalizedProducts = Array.isArray(rawProducts) ? rawProducts : rawProducts ? [rawProducts] : []
 
+    const thirtyDaysAgo = new Date()
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+
     products.value = normalizedProducts
       .filter((product) => String(readTextValue(product.active) || '1') === '1')
-      .map((product) => ({
-        id: String(product.id),
-        name: extractName(product),
-        reference: readTextValue(product.reference) || `REF-${product.id}`,
-        price: Number.parseFloat(readTextValue(product.price) || '0'),
-        description: readTextValue(product.description_short) || readTextValue(product.description) || '',
-        imageUrl: buildProductImageUrl(product)
-      }))
+      .map((product) => {
+        const dateAddStr = readTextValue(product.date_add)
+        const isNew = dateAddStr ? new Date(dateAddStr) >= thirtyDaysAgo : false
+        const isHot = String(readTextValue(product.on_sale)) === '1'
+
+        return {
+          id: String(readTextValue(product.id)),
+          name: extractName(product),
+          reference: readTextValue(product.reference) || `REF-${readTextValue(product.id)}`,
+          price: Number.parseFloat(readTextValue(product.price) || '0'),
+          description: readTextValue(product.description_short) || readTextValue(product.description) || '',
+          imageUrl: buildProductImageUrl(product),
+          categoryId: String(readTextValue(product.id_category_default) || ''),
+          isNew,
+          isHot
+        }
+      })
   } catch (loadError) {
     console.error(loadError)
     error.value = "Impossible de charger les produits depuis PrestaShop."
@@ -66,32 +103,58 @@ const loadProducts = async () => {
 }
 
 const filteredProducts = computed(() => {
-  const term = search.value.trim().toLowerCase()
-  if (!term) return products.value
-
   return products.value.filter((product) => {
-    return (
-      product.name.toLowerCase().includes(term) ||
-      product.reference.toLowerCase().includes(term)
-    )
+    // Filtre Nom ou Référence
+    if (searchName.value) {
+      const term = searchName.value.trim().toLowerCase()
+      const matchName = product.name.toLowerCase().includes(term) || product.reference.toLowerCase().includes(term)
+      if (!matchName) return false
+    }
+
+    // Filtre Catégorie
+    if (searchCategory.value) {
+      if (product.categoryId !== searchCategory.value) return false
+    }
+
+    // Filtre Prix Minimum
+    if (searchMinPrice.value !== '' && searchMinPrice.value !== null) {
+      if (product.price < Number.parseFloat(searchMinPrice.value)) return false
+    }
+
+    // Filtre Prix Maximum
+    if (searchMaxPrice.value !== '' && searchMaxPrice.value !== null) {
+      if (product.price > Number.parseFloat(searchMaxPrice.value)) return false
+    }
+
+    return true
   })
 })
 
 const formattedProductCount = computed(() => filteredProducts.value.length)
 
+// Fonction pour réinitialiser les filtres
+const resetFilters = () => {
+  searchName.value = ''
+  searchCategory.value = ''
+  searchMinPrice.value = ''
+  searchMaxPrice.value = ''
+}
+
 onMounted(async () => {
-  await Promise.all([loadProducts(), readCartCount()])
+  await Promise.all([loadProducts(), loadCategories(), readCartCount()])
 })
 </script>
 
 <template>
   <section class="front-office">
+    <FrontOfficeTopSidebar />
+
     <header class="front-office__hero">
       <div class="front-office__hero-copy">
         <p class="front-office__eyebrow">Front Office</p>
         <h1>Notre boutique</h1>
         <p class="front-office__lead">
-          Retrouvez les produits PrestaShop sous forme de catalogue moderne, charges en direct via l'API.
+          Retrouvez les produits PrestaShop sous forme de catalogue moderne, chargés en direct via l'API.
         </p>
       </div>
 
@@ -105,14 +168,44 @@ onMounted(async () => {
       </div>
     </header>
 
+    <!-- SECTION DE RECHERCHE MULTICRITÈRES -->
     <section class="front-office__toolbar">
-      <label class="front-office__search">
-        <span>Recherche</span>
-        <input v-model="search" type="search" placeholder="Nom ou reference produit" />
-      </label>
+      <div class="filters-header">
+        <span class="filters-title">Filtres de recherche</span>
+        <button type="button" class="btn-reset" @click="resetFilters" v-if="searchName || searchCategory || searchMinPrice || searchMaxPrice">
+          Réinitialiser
+        </button>
+      </div>
+      
+      <div class="filters-grid">
+        <label class="front-office__search">
+          <span>Recherche (Nom / Réf)</span>
+          <input v-model="searchName" type="search" placeholder="Ex: Montre..." />
+        </label>
+
+        <label class="front-office__search">
+          <span>Catégorie</span>
+          <select v-model="searchCategory">
+            <option value="">Toutes les catégories</option>
+            <option v-for="cat in categories" :key="cat.id" :value="cat.id">
+              {{ cat.name }}
+            </option>
+          </select>
+        </label>
+
+        <label class="front-office__search">
+          <span>Prix Min (€)</span>
+          <input v-model="searchMinPrice" type="number" min="0" placeholder="0" />
+        </label>
+
+        <label class="front-office__search">
+          <span>Prix Max (€)</span>
+          <input v-model="searchMaxPrice" type="number" min="0" placeholder="Max" />
+        </label>
+      </div>
 
       <div class="front-office__meta">
-        <span>{{ formattedProductCount }} produit(s)</span>
+        <span>{{ formattedProductCount }} produit(s) trouvé(s)</span>
       </div>
     </section>
 
@@ -133,6 +226,12 @@ onMounted(async () => {
         :to="{ name: 'FrontOfficeProductDetail', params: { id: product.id } }"
       >
         <div class="product-card__media">
+          <!-- Badges -->
+          <div class="product-card__badges">
+            <span v-if="product.isNew" class="badge badge-new">NEW</span>
+            <span v-if="product.isHot" class="badge badge-hot">HOT</span>
+          </div>
+
           <img
             v-if="product.imageUrl"
             :src="product.imageUrl"
@@ -156,13 +255,13 @@ onMounted(async () => {
             {{ product.description || 'Produit disponible dans votre boutique PrestaShop.' }}
           </p>
 
-          <span class="product-card__cta">Voir le detail du produit</span>
+          <span class="product-card__cta">Voir le détail du produit</span>
         </div>
       </router-link>
     </div>
 
     <div v-else class="front-office__empty">
-      Aucun produit ne correspond a votre recherche.
+      Aucun produit ne correspond à vos critères de recherche.
     </div>
   </section>
 </template>
@@ -260,46 +359,93 @@ onMounted(async () => {
   font-size: 0.72rem;
 }
 
+/* --- TOOLBAR MULTICRITÈRES --- */
 .front-office__toolbar {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   gap: 1rem;
-  align-items: end;
-  padding: 1rem 1.1rem;
-  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
   border-radius: 22px;
   background: rgba(255, 255, 255, 0.86);
   backdrop-filter: blur(10px);
 }
 
+.filters-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  padding-bottom: 0.8rem;
+}
+
+.filters-title {
+  font-weight: 800;
+  color: #1b2b40;
+  font-size: 1.1rem;
+}
+
+.btn-reset {
+  background: none;
+  border: none;
+  color: #e63946;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.btn-reset:hover {
+  background: rgba(230, 57, 70, 0.1);
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.2rem;
+}
+
 .front-office__search {
   display: grid;
   gap: 0.45rem;
-  min-width: min(100%, 360px);
   font-weight: 700;
   color: #20324a;
 }
 
-.front-office__search span,
-.front-office__meta {
-  font-size: 0.9rem;
-  font-weight: 700;
+.front-office__search span {
+  font-size: 0.85rem;
   color: #46556b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
-.front-office__search input {
+.front-office__search input,
+.front-office__search select {
   width: 100%;
   padding: 0.9rem 1rem;
   border: 1px solid #d8dee8;
-  border-radius: 14px;
+  border-radius: 12px;
   background: #fffdf8;
   font: inherit;
   color: #1b2b40;
+  transition: border-color 0.2s;
 }
 
-.front-office__search input:focus {
-  outline: 2px solid rgba(34, 139, 230, 0.18);
+.front-office__search input:focus,
+.front-office__search select:focus {
+  outline: none;
   border-color: #228be6;
+  box-shadow: 0 0 0 3px rgba(34, 139, 230, 0.15);
+}
+
+.front-office__meta {
+  text-align: right;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #228be6;
+  margin-top: 0.5rem;
 }
 
 .front-office__loading,
@@ -312,11 +458,12 @@ onMounted(async () => {
   background: rgba(255, 255, 255, 0.7);
   border: 1px dashed rgba(19, 34, 56, 0.18);
   color: #526171;
+  font-weight: 600;
 }
 
 .front-office__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 1.2rem;
 }
 
@@ -340,6 +487,35 @@ onMounted(async () => {
   background: linear-gradient(135deg, #f6f0de, #eaf3ff);
 }
 
+.product-card__badges {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 2;
+}
+
+.product-card__badges .badge {
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: white;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.badge-new {
+  background: linear-gradient(135deg, #40c057, #2f9e44);
+}
+
+.badge-hot {
+  background: linear-gradient(135deg, #fa5252, #e03131);
+}
+
 .product-card__media img {
   width: 100%;
   height: 100%;
@@ -360,7 +536,7 @@ onMounted(async () => {
 .product-card__body {
   display: grid;
   gap: 0.9rem;
-  padding: 1.1rem;
+  padding: 1.2rem;
 }
 
 .product-card__topline {
@@ -380,7 +556,7 @@ onMounted(async () => {
 
 .product-card__price {
   color: #0f6d3d;
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: 800;
 }
 
@@ -399,6 +575,7 @@ onMounted(async () => {
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  font-size: 0.9rem;
 }
 
 .product-card__cta {
@@ -415,14 +592,8 @@ onMounted(async () => {
 }
 
 @media (max-width: 820px) {
-  .front-office__hero,
-  .front-office__toolbar {
+  .front-office__hero {
     grid-template-columns: 1fr;
-    display: grid;
-  }
-
-  .front-office__toolbar {
-    align-items: stretch;
   }
 }
 </style>

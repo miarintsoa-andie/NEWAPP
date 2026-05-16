@@ -7,8 +7,7 @@
       <p class="home-entry__eyebrow">Bienvenue</p>
       <h1>Choisissez votre espace</h1>
       <p class="home-entry__lead">
-        Accédez directement au back office pour gérer la plateforme ou ouvrez le front office pour
-        consulter la boutique.
+        Accédez directement au back office pour gérer la plateforme ou ouvrez le front office pour consulter la boutique.
       </p>
 
       <div class="home-entry__actions">
@@ -18,10 +17,10 @@
           <span>Accéder au login puis au dashboard d’administration.</span>
         </router-link>
 
-        <router-link class="entry-card entry-card--front" :to="{ name: 'FrontOfficeHome' }">
+        <router-link class="entry-card entry-card--front" :to="{ name: 'FrontOfficeUserSelection' }">
           <span class="entry-card__tag">Front office</span>
           <strong>Page d'accueil du Front Office</strong>
-          <span>Accéder à la page d'accueil publique du Front Office.</span>
+          <span>Accéder à la boutique en tant qu'utilisateur.</span>
         </router-link>
       </div>
     </div>

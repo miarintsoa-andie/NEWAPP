@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import FrontOfficeTopSidebar from '../components/front-office/FrontOfficeTopSidebar.vue'
 import {
   buildProductImageUrl,
   extractName,
@@ -102,6 +103,8 @@ onMounted(async () => {
 
 <template>
   <section class="front-detail">
+    <FrontOfficeTopSidebar />
+
     <div class="front-detail__topbar">
       <button type="button" class="front-detail__back" @click="router.push({ name: 'FrontOfficeHome' })">
         Retour a la boutique

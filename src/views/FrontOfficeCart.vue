@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import FrontOfficeTopSidebar from '../components/front-office/FrontOfficeTopSidebar.vue'
 import {
   checkoutFrontOfficeCart,
   getFrontOfficeCartCount,
@@ -50,6 +51,23 @@ const checkoutForm = ref({
   alias: '',
   other: ''
 })
+
+const prepopulateFormFromSession = () => {
+  if (typeof window === 'undefined') return
+  try {
+    const sessionData = window.sessionStorage.getItem('frontOfficeCustomer')
+    if (sessionData) {
+      const customer = JSON.parse(sessionData)
+      if (customer) {
+        checkoutForm.value.firstname = customer.firstname || ''
+        checkoutForm.value.lastname = customer.lastname || ''
+        checkoutForm.value.email = customer.email || ''
+      }
+    }
+  } catch (e) {
+    console.error('Erreur lors de la lecture de la session client', e)
+  }
+}
 
 const formatPrice = (value) => `${Number(value || 0).toFixed(2)} EUR`
 
@@ -173,11 +191,16 @@ watch(
   { immediate: true }
 )
 
-onMounted(refreshPage)
+onMounted(() => {
+  prepopulateFormFromSession()
+  refreshPage()
+})
 </script>
 
 <template>
   <section class="front-cart">
+    <FrontOfficeTopSidebar />
+
     <header class="front-cart__header">
       <div>
         <p class="front-cart__eyebrow">Panier</p>

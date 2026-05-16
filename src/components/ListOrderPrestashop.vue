@@ -12,7 +12,7 @@ const error = ref(null);
 // Define the 3 target statuses you want to manage here.
 // To change labels or matching keywords, edit this list only.
 const TARGET_STATUSES = [
-  { label: "echec paiement", keywords: ["erreur", "paiement"] },
+  { label: "dans le panier", keywords: ["attente", "paiement"] },
   { label: "paiement effectue", keywords: ["paiement", "accepte"] },
   { label: "annule", keywords: ["annule"] }
 ];
@@ -103,6 +103,13 @@ const fetchOrders = async () => {
       const customer = rawCustomers.find(c => c.id == customerId);
       const carrier = rawCarriers.find(c => c.id == carrierId);
       const state = rawStates.find(s => s.id == stateId);
+      
+      // Essayer de trouver si l'état correspond à l'un de nos TARGET_STATUSES
+      let displayStatus = "Statut inconnu";
+      if (state) {
+        const optionMatch = statusOptions.value.find(opt => String(opt.id) === String(stateId));
+        displayStatus = optionMatch ? optionMatch.label : getVal(state.name);
+      }
 
       return {
         id: getVal(ord.id),
@@ -112,7 +119,7 @@ const fetchOrders = async () => {
         carrierName: carrier ? (getVal(carrier.name) || `Transporteur #${carrierId}`) : `Transporteur #${carrierId}`,
         total: ord.total_paid ? parseFloat(getVal(ord.total_paid)).toFixed(2) : "0.00",
         payment: getVal(ord.payment) || "Inconnu",
-        status: state ? (getVal(state.name) || "Statut inconnu") : "N/A",
+        status: displayStatus,
         currentStateId: stateId,
         date: ord.date_add ? new Date(getVal(ord.date_add)).toLocaleDateString('fr-FR') : "N/A"
       };

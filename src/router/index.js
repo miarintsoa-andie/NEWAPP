@@ -4,12 +4,15 @@ import Dashboard from '../views/Dashboard.vue'
 import FrontOfficeHome from '../views/FrontOfficeHome.vue'
 import FrontOfficeCart from '../views/FrontOfficeCart.vue'
 import FrontOfficeProductDetail from '../views/FrontOfficeProductDetail.vue'
+import FrontOfficeAuth from '../views/FrontOfficeAuth.vue'
+import FrontOfficeUserSelection from '../views/FrontOfficeUserSelection.vue'
 import ListCategoryPrestashop from '../components/ListCategoryPrestashop.vue'
 import ListProductPrestashop from '../components/ListProductPrestashop.vue'
 import ListOrderPrestashop from '../components/ListOrderPrestashop.vue'
 // import ListCartPrestashop from '../components/ListCartPrestashop.vue'
 // import ListCustomerPrestashop from '../components/ListCustomerPrestashop.vue'
 import Login from '../views/Login.vue'
+import StockManager from '../views/StockManager.vue'
 import ResetPrestashop from '../components/ResetPrestashop.vue'
 import ImportPrestashop from '../components/ImportPrestashop.vue'
 
@@ -48,6 +51,18 @@ const routes = [
     component: FrontOfficeProductDetail,
     meta: { public: true },
     props: true
+  },
+  {
+    path: '/front-office/auth',
+    name: 'FrontOfficeAuth',
+    component: FrontOfficeAuth,
+    meta: { public: true }
+  },
+  {
+    path: '/front-office/select-user',
+    name: 'FrontOfficeUserSelection',
+    component: FrontOfficeUserSelection,
+    meta: { public: true }
   },
   {
     path: '/dashboard',
@@ -104,6 +119,11 @@ const routes = [
     path: '/orders',
     name: 'Order',
     component: ListOrderPrestashop
+  },
+  {
+    path: '/stocks',
+    name: 'Stocks',
+    component: StockManager
   },
 
  
