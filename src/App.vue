@@ -47,6 +47,10 @@ const handleLogout = () => {
           <span class="label">Commandes</span>
         </router-link>
 
+        <router-link to="/stocks" class="nav-item" active-class="active">
+          <span class="label">Stocks</span>
+        </router-link>
+
         
       </nav>
 
