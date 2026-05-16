@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import { prestashopApi } from "../services/prestashopService";
+import { prestashopApi, unwrapText, getList } from "../services/prestashopService";
 
 const orders = ref([]);
 const orderStates = ref([]);
@@ -27,28 +27,11 @@ const normalizeText = (text) => {
     .trim();
 };
 
-const getVal = (val) => {
-  if (val && typeof val === "object") {
-    if (val["#text"] !== undefined) return val["#text"];
-    if (val.language) {
-      const lang = val.language;
-      if (Array.isArray(lang)) return lang[0]?.["#text"] || lang[0];
-      return lang["#text"] || lang;
-    }
-  }
-  return val;
-};
-
-const getStateName = (state) => getVal(state?.name) || "";
-
-const getList = (data, type) => {
-  const list = data.prestashop?.[type]?.[type.slice(0, -1)];
-  return Array.isArray(list) ? list : (list ? [list] : []);
-};
+const getStateName = (state) => unwrapText(state?.name) || "";
 
 const findStatusByKeywords = (states, keywords) => {
   return states.find((state) => {
-    const name = normalizeText(getVal(state.name));
+    const name = normalizeText(unwrapText(state.name));
     return keywords.every((kw) => name.includes(kw));
   });
 };
@@ -96,9 +79,9 @@ const fetchOrders = async () => {
     buildStatusOptions(rawStates);
 
     orders.value = rawOrders.map(ord => {
-      const customerId = getVal(ord.id_customer);
-      const carrierId = getVal(ord.id_carrier);
-      const stateId = getVal(ord.current_state);
+      const customerId = unwrapText(ord.id_customer);
+      const carrierId = unwrapText(ord.id_carrier);
+      const stateId = unwrapText(ord.current_state);
 
       const customer = rawCustomers.find(c => c.id == customerId);
       const carrier = rawCarriers.find(c => c.id == carrierId);
@@ -108,20 +91,20 @@ const fetchOrders = async () => {
       let displayStatus = "Statut inconnu";
       if (state) {
         const optionMatch = statusOptions.value.find(opt => String(opt.id) === String(stateId));
-        displayStatus = optionMatch ? optionMatch.label : getVal(state.name);
+        displayStatus = optionMatch ? optionMatch.label : unwrapText(state.name);
       }
 
       return {
-        id: getVal(ord.id),
-        reference: getVal(ord.reference),
-        new_client: getVal(ord.new_client) === "1" ? "OUI" : "NON",
-        customerName: customer ? `${getVal(customer.firstname)} ${getVal(customer.lastname)}`.trim() : `Client #${customerId}`,
-        carrierName: carrier ? (getVal(carrier.name) || `Transporteur #${carrierId}`) : `Transporteur #${carrierId}`,
-        total: ord.total_paid ? parseFloat(getVal(ord.total_paid)).toFixed(2) : "0.00",
-        payment: getVal(ord.payment) || "Inconnu",
+        id: unwrapText(ord.id),
+        reference: unwrapText(ord.reference),
+        new_client: unwrapText(ord.new_client) === "1" ? "OUI" : "NON",
+        customerName: customer ? `${unwrapText(customer.firstname)} ${unwrapText(customer.lastname)}`.trim() : `Client #${customerId}`,
+        carrierName: carrier ? (unwrapText(carrier.name) || `Transporteur #${carrierId}`) : `Transporteur #${carrierId}`,
+        total: ord.total_paid ? parseFloat(unwrapText(ord.total_paid)).toFixed(2) : "0.00",
+        payment: unwrapText(ord.payment) || "Inconnu",
         status: displayStatus,
         currentStateId: stateId,
-        date: ord.date_add ? new Date(getVal(ord.date_add)).toLocaleDateString('fr-FR') : "N/A"
+        date: ord.date_add ? new Date(unwrapText(ord.date_add)).toLocaleDateString('fr-FR') : "N/A"
       };
     });
 

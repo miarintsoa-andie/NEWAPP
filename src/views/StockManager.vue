@@ -1,22 +1,10 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { prestashopApi, extractName } from '../services/prestashopService'
+import { prestashopApi, extractName, unwrapText, getList } from '../services/prestashopService'
 
 const products = ref([])
 const loading = ref(true)
 const error = ref('')
-
-const getList = (data, type) => {
-  const list = data.prestashop?.[type]?.[type.slice(0, -1)]
-  return Array.isArray(list) ? list : (list ? [list] : [])
-}
-
-const unwrap = (val) => {
-  if (val && typeof val === 'object') {
-    if (val['#text'] !== undefined) return val['#text']
-  }
-  return val
-}
 
 const loadData = async () => {
   try {
@@ -32,17 +20,17 @@ const loadData = async () => {
     const rawStocks = getList(stockRes, 'stock_availables')
 
     products.value = rawProducts.map(p => {
-      const prodId = String(unwrap(p.id))
+      const prodId = String(unwrapText(p.id))
       // Chercher l'entrée de stock correspondante (généralement attribut 0 pour le produit simple)
-      const stockAssoc = rawStocks.find(s => String(unwrap(s.id_product)) === prodId && String(unwrap(s.id_product_attribute)) === '0')
+      const stockAssoc = rawStocks.find(s => String(unwrapText(s.id_product)) === prodId && String(unwrapText(s.id_product_attribute)) === '0')
       
       return {
         id: prodId,
         name: extractName(p),
-        reference: unwrap(p.reference) || `REF-${prodId}`,
-        stockId: stockAssoc ? unwrap(stockAssoc.id) : null,
-        quantity: stockAssoc ? parseInt(unwrap(stockAssoc.quantity), 10) : 0,
-        newQuantity: stockAssoc ? parseInt(unwrap(stockAssoc.quantity), 10) : 0,
+        reference: unwrapText(p.reference) || `REF-${prodId}`,
+        stockId: stockAssoc ? unwrapText(stockAssoc.id) : null,
+        quantity: stockAssoc ? parseInt(unwrapText(stockAssoc.quantity), 10) : 0,
+        newQuantity: stockAssoc ? parseInt(unwrapText(stockAssoc.quantity), 10) : 0,
         isSaving: false
       }
     })

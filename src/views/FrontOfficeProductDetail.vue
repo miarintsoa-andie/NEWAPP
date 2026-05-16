@@ -7,7 +7,8 @@ import {
   extractName,
   getFrontOfficeCart,
   prestashopApi,
-  syncFrontOfficeCartItem
+  syncFrontOfficeCartItem,
+  unwrapText
 } from '../services/prestashopService'
 
 const route = useRoute()
@@ -20,17 +21,6 @@ const quantity = ref(1)
 const cartCount = ref(0)
 const product = ref(null)
 
-const readTextValue = (value) => {
-  if (value && typeof value === 'object') {
-    if (value['#text'] !== undefined) return value['#text']
-    if (value.language) {
-      const language = Array.isArray(value.language) ? value.language[0] : value.language
-      return language?.['#text'] ?? language ?? ''
-    }
-  }
-  return value ?? ''
-}
-
 const stripHtml = (value) => String(value || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 
 const readCartCount = async () => {
@@ -40,7 +30,7 @@ const readCartCount = async () => {
     const normalizedRows = Array.isArray(rows) ? rows : rows ? [rows] : []
 
     cartCount.value = normalizedRows.reduce((total, row) => {
-      return total + Number.parseInt(readTextValue(row?.quantity), 10)
+      return total + Number.parseInt(unwrapText(row?.quantity), 10)
     }, 0)
   } catch {
     cartCount.value = 0
@@ -61,13 +51,31 @@ const loadProduct = async () => {
       return
     }
 
+    // Récupérer le stock
+    let stockQuantity = 0
+    try {
+      const stockAssoc = rawProduct.associations?.stock_availables?.stock_available || rawProduct.associations?.stock_availables
+      const stockList = Array.isArray(stockAssoc) ? stockAssoc : (stockAssoc ? [stockAssoc] : [])
+      // On cherche l'association stock (le format XML de PrestaShop peut varier légèrement)
+      const baseStock = stockList.find(s => String(unwrapText(s.id_product_attribute)) === '0' || String(s.id_product_attribute) === '0') || stockList[0]
+      
+      if (baseStock && (baseStock.id || baseStock['@_id'])) {
+        const stockId = unwrapText(baseStock.id) || unwrapText(baseStock['@_id'])
+        const stockRes = await prestashopApi.getOne('STOCK_AVAILABLES', stockId)
+        stockQuantity = parseInt(unwrapText(stockRes?.prestashop?.stock_available?.quantity), 10) || 0
+      }
+    } catch (e) {
+      console.warn("Impossible de charger le stock pour ce produit", e)
+    }
+
     product.value = {
       id: String(rawProduct.id),
       name: extractName(rawProduct),
-      reference: readTextValue(rawProduct.reference) || `REF-${rawProduct.id}`,
-      price: Number.parseFloat(readTextValue(rawProduct.price) || '0'),
-      description: stripHtml(readTextValue(rawProduct.description)) || stripHtml(readTextValue(rawProduct.description_short)),
+      reference: unwrapText(rawProduct.reference) || `REF-${rawProduct.id}`,
+      price: Number.parseFloat(unwrapText(rawProduct.price) || '0'),
+      description: stripHtml(unwrapText(rawProduct.description)) || stripHtml(unwrapText(rawProduct.description_short)),
       imageUrl: buildProductImageUrl(rawProduct),
+      stockQuantity,
       raw: rawProduct
     }
   } catch (loadError) {
@@ -102,282 +110,81 @@ onMounted(async () => {
 </script>
 
 <template>
-  <section class="front-detail">
+  <div class="front-office-layout">
     <FrontOfficeTopSidebar />
 
-    <div class="front-detail__topbar">
-      <button type="button" class="front-detail__back" @click="router.push({ name: 'FrontOfficeHome' })">
-        Retour a la boutique
-      </button>
-
-      <div class="front-detail__cart">
-        <span>Panier</span>
-        <strong>{{ cartCount }}</strong>
-        <button type="button" class="front-detail__cart-button" @click="router.push({ name: 'FrontOfficeCart' })">
-          Voir
+    <main class="fo-container">
+      <div style="margin-bottom: 2rem;">
+        <button type="button" @click="router.push({ name: 'FrontOfficeHome' })" style="background: none; border: none; font-weight: 700; color: var(--fo-text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
+          ← Retour à la boutique
         </button>
       </div>
-    </div>
 
-    <div v-if="error && !product" class="alert alert-error">
-      {{ error }}
-    </div>
-
-    <div v-if="loading" class="front-detail__loading">
-      <div class="loader"></div>
-      <p>Chargement du produit...</p>
-    </div>
-
-    <article v-else-if="product" class="front-detail__card">
-      <div class="front-detail__media">
-        <img v-if="product.imageUrl" :src="product.imageUrl" :alt="product.name" />
-        <div v-else class="front-detail__placeholder">
-          <span>{{ product.name.slice(0, 1) }}</span>
-        </div>
+      <div v-if="error && !product" class="alert alert-error" style="background: #ffe3e3; color: #e03131; padding: 1rem; border-radius: 8px;">
+        {{ error }}
       </div>
 
-      <div class="front-detail__content">
-        <p class="front-detail__ref">{{ product.reference }}</p>
-        <h1>{{ product.name }}</h1>
-        <p class="front-detail__price">{{ product.price.toFixed(2) }} EUR</p>
-        <p class="front-detail__note">
-          Le montant affiche ici correspond uniquement au produit.
-        </p>
-
-        <p class="front-detail__description">
-          {{ product.description || 'Produit disponible dans votre boutique PrestaShop.' }}
-        </p>
-
-        <div v-if="error" class="alert alert-error">
-          {{ error }}
-        </div>
-
-        <div class="front-detail__purchase">
-          <label class="front-detail__qty">
-            <span>Quantite</span>
-            <input v-model="quantity" type="number" min="1" step="1" />
-          </label>
-
-          <button type="button" class="front-detail__buy" :disabled="saving" @click="addToCart">
-            {{ saving ? 'Ajout...' : 'Ajouter au panier' }}
-          </button>
-        </div>
+      <div v-if="loading" style="text-align: center; padding: 3rem; color: var(--fo-text-muted);">
+        <p>Chargement du produit...</p>
       </div>
-    </article>
-  </section>
+
+      <article v-else-if="product" class="fo-detail-card">
+        <div class="fo-detail-media">
+          <img v-if="product.imageUrl" :src="product.imageUrl" :alt="product.name" />
+          <div v-else style="display: grid; place-items: center; height: 100%; font-size: 5rem; color: var(--fo-text-muted); font-weight: 800;">
+            {{ product.name.slice(0, 1) }}
+          </div>
+        </div>
+
+        <div class="fo-detail-content">
+          <div>
+            <p style="color: var(--fo-text-muted); font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem; letter-spacing: 0.1em;">
+              {{ product.reference }}
+            </p>
+            <h1>{{ product.name }}</h1>
+          </div>
+          
+          <p class="fo-detail-price">{{ product.price.toFixed(2) }} EUR</p>
+          
+          <div>
+            <p :class="['fo-detail-stock', product.stockQuantity > 0 ? 'ok' : 'out']">
+              <span v-if="product.stockQuantity > 0">📦 En stock : <strong>{{ product.stockQuantity }} exemplaire(s)</strong></span>
+              <span v-else>⚠️ Rupture de stock</span>
+            </p>
+          </div>
+
+          <p style="color: var(--fo-text-muted); line-height: 1.7;">
+            {{ product.description || 'Produit disponible dans votre boutique PrestaShop.' }}
+          </p>
+
+          <div v-if="error" class="alert alert-error" style="background: #ffe3e3; color: #e03131; padding: 1rem; border-radius: 8px;">
+            {{ error }}
+          </div>
+
+          <div class="fo-detail-purchase">
+            <input 
+              class="fo-qty-input"
+              v-model="quantity" 
+              type="number" 
+              min="1" 
+              :max="product.stockQuantity > 0 ? product.stockQuantity : 1" 
+              step="1" 
+              :disabled="product.stockQuantity <= 0"
+            />
+
+            <button 
+              type="button" 
+              class="fo-btn-primary" 
+              :disabled="saving || product.stockQuantity <= 0 || quantity > product.stockQuantity" 
+              @click="addToCart"
+              style="flex-grow: 1;"
+            >
+              {{ saving ? 'Ajout...' : (product.stockQuantity > 0 ? 'Ajouter au panier' : 'Indisponible') }}
+            </button>
+          </div>
+        </div>
+      </article>
+    </main>
+  </div>
 </template>
 
-<style scoped>
-.front-detail {
-  min-height: 100vh;
-  padding: clamp(1.25rem, 3vw, 2.5rem);
-  background:
-    radial-gradient(circle at top left, rgba(255, 196, 70, 0.2), transparent 28%),
-    radial-gradient(circle at bottom right, rgba(34, 139, 230, 0.16), transparent 24%),
-    linear-gradient(180deg, #fffaf0 0%, #f6f8fb 100%);
-}
-
-.front-detail__topbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  align-items: center;
-  margin-bottom: 1.5rem;
-}
-
-.front-detail__back,
-.front-detail__cart,
-.front-detail__card {
-  border: 1px solid rgba(25, 36, 56, 0.08);
-  box-shadow: 0 18px 50px rgba(18, 25, 38, 0.08);
-}
-
-.front-detail__back {
-  border-radius: 999px;
-  padding: 0.9rem 1.2rem;
-  background: white;
-  color: #132238;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.front-detail__cart {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  border-radius: 999px;
-  padding: 0.75rem 1rem;
-  background: rgba(255, 255, 255, 0.86);
-}
-
-.front-detail__cart strong {
-  display: inline-grid;
-  place-items: center;
-  min-width: 2rem;
-  height: 2rem;
-  border-radius: 999px;
-  background: #132238;
-  color: white;
-}
-
-.front-detail__cart-button {
-  border: 0;
-  border-radius: 999px;
-  padding: 0.7rem 0.95rem;
-  background: #132238;
-  color: white;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.front-detail__loading {
-  display: grid;
-  place-items: center;
-  gap: 0.85rem;
-  min-height: 240px;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px dashed rgba(19, 34, 56, 0.18);
-  color: #526171;
-}
-
-.front-detail__card {
-  display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(320px, 1fr);
-  overflow: hidden;
-  border-radius: 28px;
-  background: white;
-}
-
-.front-detail__media {
-  min-height: 420px;
-  background: linear-gradient(135deg, #f6f0de, #eaf3ff);
-}
-
-.front-detail__media img,
-.front-detail__placeholder {
-  width: 100%;
-  height: 100%;
-}
-
-.front-detail__media img {
-  display: block;
-  object-fit: cover;
-}
-
-.front-detail__placeholder {
-  display: grid;
-  place-items: center;
-  color: #20324a;
-  font-size: 5rem;
-  font-weight: 800;
-}
-
-.front-detail__content {
-  display: grid;
-  align-content: start;
-  gap: 1rem;
-  padding: clamp(1.5rem, 4vw, 3rem);
-}
-
-.front-detail__ref {
-  margin: 0;
-  color: #7b8796;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.front-detail__content h1 {
-  margin: 0;
-  font-size: clamp(2rem, 4vw, 3.5rem);
-  line-height: 1.05;
-  color: #132238;
-}
-
-.front-detail__price {
-  margin: 0;
-  color: #0f6d3d;
-  font-size: 1.8rem;
-  font-weight: 800;
-}
-
-.front-detail__note {
-  margin: -0.35rem 0 0;
-  color: #7b8796;
-  font-size: 0.95rem;
-}
-
-.front-detail__description {
-  margin: 0;
-  color: #556476;
-  line-height: 1.7;
-}
-
-.front-detail__purchase {
-  display: flex;
-  gap: 1rem;
-  align-items: end;
-  margin-top: 0.5rem;
-}
-
-.front-detail__qty {
-  display: grid;
-  gap: 0.45rem;
-  font-weight: 700;
-  color: #20324a;
-}
-
-.front-detail__qty input {
-  width: 130px;
-  padding: 0.9rem 1rem;
-  border: 1px solid #d8dee8;
-  border-radius: 14px;
-  background: #fffdf8;
-  font: inherit;
-}
-
-.front-detail__buy {
-  border: 0;
-  border-radius: 14px;
-  padding: 1rem 1.35rem;
-  background: linear-gradient(135deg, #132238, #228be6);
-  color: white;
-  font: inherit;
-  font-weight: 800;
-  cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-
-.front-detail__buy:hover:not(:disabled) {
-  transform: translateY(-2px);
-}
-
-.front-detail__buy:disabled {
-  opacity: 0.65;
-  cursor: wait;
-}
-
-@media (max-width: 860px) {
-  .front-detail__card {
-    grid-template-columns: 1fr;
-  }
-
-  .front-detail__media {
-    min-height: 300px;
-  }
-
-  .front-detail__purchase {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .front-detail__qty input,
-  .front-detail__buy {
-    width: 100%;
-  }
-}
-</style>

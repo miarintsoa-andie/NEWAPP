@@ -204,7 +204,7 @@ const DEFAULT_FRONT_OFFICE_CART_CONTEXT = {
   secure_key: GLOBAL_API_KEY
 };
 
-const unwrapText = (value) => {
+export const unwrapText = (value) => {
   if (value && typeof value === "object") {
     if (value["#text"] !== undefined) return value["#text"];
     if (value.language) {
@@ -214,6 +214,11 @@ const unwrapText = (value) => {
     }
   }
   return value;
+};
+
+export const getList = (data, type) => {
+  const list = data.prestashop?.[type]?.[type.slice(0, -1)];
+  return Array.isArray(list) ? list : (list ? [list] : []);
 };
 
 const toArray = (value) => {

@@ -4,7 +4,7 @@
  * Affichage des statistiques en chiffres rÃ©els sans graphiques.
  */
 import { ref, onMounted, computed } from "vue";
-import { prestashopApi } from "../services/prestashopService";
+import { prestashopApi, getList } from "../services/prestashopService";
 
 const products = ref([]);
 const categories = ref([]);
@@ -19,11 +19,6 @@ const fetchStats = async () => {
       prestashopApi.getAll("CATEGORIES"),
       prestashopApi.getAll("ORDERS")
     ]);
-
-    const getList = (data, type) => {
-      const list = data.prestashop?.[type]?.[type.slice(0, -1)];
-      return Array.isArray(list) ? list : (list ? [list] : []);
-    };
 
     products.value = getList(prodData, "products");
     categories.value = getList(catData, "categories");
