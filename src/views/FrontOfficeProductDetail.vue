@@ -137,6 +137,9 @@ onMounted(async () => {
         <p class="front-detail__ref">{{ product.reference }}</p>
         <h1>{{ product.name }}</h1>
         <p class="front-detail__price">{{ product.price.toFixed(2) }} EUR</p>
+        <p class="front-detail__note">
+          Le montant affiche ici correspond uniquement au produit.
+        </p>
 
         <p class="front-detail__description">
           {{ product.description || 'Produit disponible dans votre boutique PrestaShop.' }}
@@ -297,6 +300,12 @@ onMounted(async () => {
   color: #0f6d3d;
   font-size: 1.8rem;
   font-weight: 800;
+}
+
+.front-detail__note {
+  margin: -0.35rem 0 0;
+  color: #7b8796;
+  font-size: 0.95rem;
 }
 
 .front-detail__description {

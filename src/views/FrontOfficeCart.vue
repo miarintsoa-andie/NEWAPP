@@ -54,6 +54,7 @@ const checkoutForm = ref({
 const formatPrice = (value) => `${Number(value || 0).toFixed(2)} EUR`
 
 const isCartEmpty = computed(() => items.value.length === 0)
+const isCashOnDelivery = computed(() => checkoutForm.value.payment_module === 'ps_cashondelivery')
 const selectedCountry = computed(
   () => checkoutContext.value.countries.find((country) => String(country.id) === String(checkoutForm.value.id_country)) || null
 )
@@ -61,6 +62,11 @@ const availableStates = computed(
   () => checkoutContext.value.statesByCountry?.[String(checkoutForm.value.id_country)] || []
 )
 const checkoutReady = computed(() => !checkoutLoading.value && checkoutContext.value.countries.length > 0)
+const displayedTotal = computed(() => (isCashOnDelivery.value ? subtotal.value : total.value))
+const totalHint = computed(() => {
+  if (!isCashOnDelivery.value) return ''
+  return 'Paiement a la livraison selectionne: les frais de livraison ne sont pas ajoutes au montant affiche.'
+})
 
 const loadCart = async () => {
   const [details, count] = await Promise.all([
@@ -200,7 +206,7 @@ onMounted(refreshPage)
     <div v-if="success" class="front-cart__success">
       <div>
         {{ success }}
-        <span v-if="orderResult">Montant: {{ formatPrice(orderResult.total) }}</span>
+        <span v-if="orderResult">Montant: {{ formatPrice(isCashOnDelivery ? subtotal : orderResult.total) }}</span>
       </div>
       <div v-if="orderResult?.paymentMethod || orderResult?.carrierName" class="front-cart__success-meta">
         <span v-if="orderResult?.paymentMethod">Paiement: {{ orderResult.paymentMethod }}</span>
@@ -273,8 +279,9 @@ onMounted(refreshPage)
           </div>
           <div class="summary-row">
             <span>Total</span>
-            <strong>{{ formatPrice(total) }}</strong>
+            <strong>{{ formatPrice(displayedTotal) }}</strong>
           </div>
+          <p v-if="totalHint" class="summary-card__hint">{{ totalHint }}</p>
         </div>
 
         <form class="checkout-card" @submit.prevent="submitOrder">
