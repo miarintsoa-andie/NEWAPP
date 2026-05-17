@@ -50,11 +50,31 @@ const CONFIG = {
   STOCK_AVAILABLES: {
     API_KEY: GLOBAL_API_KEY,
     ENDPOINT: "/EVALUATION2026/api/stock_availables"
+  },
+  PRODUCT_OPTIONS: {
+    API_KEY: GLOBAL_API_KEY,
+    ENDPOINT: "/EVALUATION2026/api/product_options"
+  },
+  PRODUCT_OPTION_VALUES: {
+    API_KEY: GLOBAL_API_KEY,
+    ENDPOINT: "/EVALUATION2026/api/product_option_values"
+  },
+  COMBINATIONS: {
+    API_KEY: GLOBAL_API_KEY,
+    ENDPOINT: "/EVALUATION2026/api/combinations"
   }
 };
 
+// Raw API pour les services d'import (accès direct avec auth pré-configurée)
+const API_BASE = '/EVALUATION2026/api';
+const rawApiAuth = { username: GLOBAL_API_KEY, password: '' };
 
-
+export const rawApi = {
+  get: (path, config = {}) => axios.get(`${API_BASE}${path}`, { ...config, auth: rawApiAuth }),
+  post: (path, data, config = {}) => axios.post(`${API_BASE}${path}`, data, { ...config, auth: rawApiAuth }),
+  put: (path, data, config = {}) => axios.put(`${API_BASE}${path}`, data, { ...config, auth: rawApiAuth }),
+  delete: (path, config = {}) => axios.delete(`${API_BASE}${path}`, { ...config, auth: rawApiAuth }),
+};
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_" });
 const builder = new XMLBuilder({ ignoreAttributes: false, format: true });
@@ -480,7 +500,7 @@ export const getFrontOfficeCartDetails = async () => {
         reference: unwrapText(product?.reference) || `REF-${row.id_product}`,
         unitPrice,
         lineTotal: unitPrice * quantity,
-        imageUrl: buildProductImageUrl(product),
+        imageUrl: buildProductImageUrl(product), 
         rawProduct: product
       };
     })

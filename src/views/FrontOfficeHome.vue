@@ -92,6 +92,12 @@ const loadProducts = async () => {
   }
 }
 
+// Résoudre le nom de catégorie à partir de l'ID
+const getCategoryName = (categoryId) => {
+  const cat = categories.value.find(c => c.id === categoryId)
+  return cat ? cat.name : ''
+}
+
 const filteredProducts = computed(() => {
   return products.value.filter((product) => {
     // Filtre Nom ou Référence
@@ -198,6 +204,7 @@ onMounted(async () => {
           <div class="fo-product-card__content">
             <span class="fo-product-card__ref">{{ product.reference }}</span>
             <h3>{{ product.name }}</h3>
+            <span v-if="getCategoryName(product.categoryId)" class="fo-product-card__category">{{ getCategoryName(product.categoryId) }}</span>
             <span class="fo-product-card__price">{{ product.price.toFixed(2) }} EUR</span>
           </div>
         </router-link>

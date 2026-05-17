@@ -1,4 +1,4 @@
-﻿<script setup>
+<script setup>
 import { ref } from "vue";
 import { prestashopApi } from "../services/prestashopService";
 
@@ -10,6 +10,8 @@ const successMessage = ref("");
 const modules = ref([
   { id: 'CATEGORIES', name: 'Catégories', checked: false, keepIds: [1, 2] },
   { id: 'PRODUCTS', name: 'Produits', checked: false, keepIds: [] },
+  { id: 'PRODUCT_OPTIONS', name: 'Groupes d\'attributs', checked: false, keepIds: [] },
+  { id: 'PRODUCT_OPTION_VALUES', name: 'Valeurs d\'attributs', checked: false, keepIds: [] },
   { id: 'ORDERS', name: 'Commandes', checked: false, keepIds: [] },
   { id: 'CUSTOMERS', name: 'Clients', checked: false, keepIds: [] },
   { id: 'CARTS', name: 'Paniers', checked: false, keepIds: [] }

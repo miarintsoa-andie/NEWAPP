@@ -75,8 +75,23 @@ const loadProduct = async () => {
       price: Number.parseFloat(unwrapText(rawProduct.price) || '0'),
       description: stripHtml(unwrapText(rawProduct.description)) || stripHtml(unwrapText(rawProduct.description_short)),
       imageUrl: buildProductImageUrl(rawProduct),
+      categoryId: String(unwrapText(rawProduct.id_category_default) || ''),
+      categoryName: '',
       stockQuantity,
       raw: rawProduct
+    }
+
+    // Charger le nom de la catégorie
+    try {
+      if (product.value.categoryId && product.value.categoryId !== '0') {
+        const catRes = await prestashopApi.getOne('CATEGORIES', product.value.categoryId)
+        const cat = catRes?.prestashop?.category
+        if (cat) {
+          product.value.categoryName = extractName(cat)
+        }
+      }
+    } catch (e) {
+      console.warn('Impossible de charger la catégorie', e)
     }
   } catch (loadError) {
     console.error(loadError)
@@ -142,6 +157,7 @@ onMounted(async () => {
               {{ product.reference }}
             </p>
             <h1>{{ product.name }}</h1>
+            <span v-if="product.categoryName" class="fo-product-card__category" style="margin-top: 0.5rem;">{{ product.categoryName }}</span>
           </div>
           
           <p class="fo-detail-price">{{ product.price.toFixed(2) }} EUR</p>
