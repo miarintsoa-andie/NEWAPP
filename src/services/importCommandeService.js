@@ -103,33 +103,29 @@ const updateOrderDates = async (orderId, orderDate) => {
 
 const resolveOrderStateIdFromCsv = async (etat) => {
   const normalizedEtat = normalizeText(etat);
-  if (!normalizedEtat) return '';
-
-  let keywords = [];
-  if (normalizedEtat.includes('accepte')) {
-    keywords = ['paiement', 'accepte'];
-  } else if (normalizedEtat.includes('attente')) {
-    keywords = ['attente'];
-  } else if (normalizedEtat.includes('erreur') || normalizedEtat.includes('refuse')) {
-    keywords = ['erreur'];
-  } else if (normalizedEtat.includes('annule')) {
-    keywords = ['annule'];
-  }
+  if (!normalizedEtat || normalizedEtat.includes('panier')) return '';
 
   const states = await loadOrderStates();
-  const match = states.find((state) => {
-    const normalizedName = normalizeText(state.name);
-    return keywords.length > 0 && keywords.every((kw) => normalizedName.includes(kw));
-  });
-
-  if (match) return match.id;
-
-  const directMatch = states.find((state) => normalizeText(state.name).includes(normalizedEtat));
-  return directMatch?.id || '';
+  const exactMatch = states.find((state) => normalizeText(state.name) === normalizedEtat);
+  return exactMatch?.id || '';
 };
 
 const isEtatPaiementAccepte = (etat) => {
-  return normalizeText(etat).includes('accepte');
+  return normalizeText(etat) === 'paiement effectue';
+};
+
+const applyOrderState = async (orderId, orderStateId) => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
+  <order_history>
+    <id_order><![CDATA[${orderId}]]></id_order>
+    <id_order_state><![CDATA[${orderStateId}]]></id_order_state>
+  </order_history>
+</prestashop>`;
+
+  await rawApi.post('/order_histories', xml, {
+    headers: { 'Content-Type': 'application/xml; charset=utf-8' }
+  });
 };
 
 export const validerCSVCommandes = (rows) => {
@@ -434,6 +430,14 @@ export const importerCommandes = async (commandesTraitees, onProgress) => {
       const idCart = await creerPanier(idCustomer, idAddress, items, registre);
       cmd.id_cart = idCart;
 
+      const normalizedEtat = normalizeText(cmd.etat);
+      if (!normalizedEtat || normalizedEtat.includes('panier')) {
+        cmd.status = 'dans le panier';
+        successCount++;
+        if (onProgress) onProgress(cmd, i, commandesTraitees.length);
+        continue;
+      }
+
       const orderStateId = await resolveOrderStateIdFromCsv(cmd.etat);
       if (!orderStateId) {
         throw new Error(`Etat commande introuvable pour: "${cmd.etat}"`);
@@ -456,6 +460,7 @@ export const importerCommandes = async (commandesTraitees, onProgress) => {
         isValid
       );
       cmd.id_order = result.id;
+      await applyOrderState(result.id, orderStateId);
       cmd.status = 'success';
       successCount++;
     } catch (err) {
