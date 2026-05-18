@@ -152,7 +152,7 @@ onMounted(fetchStats);
   <div class="dashboard">
     <div class="header mb-2 flex justify-between align-center">
       <div class="title-section">
-        <h1>Tableau de Bord</h1>
+        <h1>Tableau de Bord </h1>
         <p class="text-muted" style="margin-top: -1rem;">Récapitulatif chiffré de votre boutique</p>
       </div>
       <div v-if="loading" class="loader"></div>
