@@ -4,7 +4,7 @@
  * Affichage des statistiques en chiffres réels sans graphiques.
  */
 import { ref, onMounted, computed } from "vue";
-import { prestashopApi, getList } from "../services/prestashopService";
+import { prestashopApi, getList, unwrapText, extractName } from "../services/prestashopService";
 
 const products = ref([]);
 const categories = ref([]);
@@ -30,20 +30,103 @@ const fetchStats = async () => {
   }
 };
 
+// --- Helper pour lire une valeur numérique ---
+const readNum = (val) => parseFloat(unwrapText(val) || '0') || 0;
+
 // --- CALCULS DES STATISTIQUES ---
 
 const totalSales = computed(() => {
   return orders.value.reduce((sum, order) => {
-    return sum + parseFloat(order.total_paid?.['#text'] || order.total_paid || 0);
+    return sum + readNum(order.total_paid);
   }, 0);
 });
 
 const totalOrders = computed(() => orders.value.length);
 
+// --- Montant total d'achat (coût) basé sur wholesale_price des produits vendus ---
+const totalPurchase = computed(() => {
+  let total = 0;
+
+  // Créer un index produit par id pour accès rapide
+  const productById = {};
+  for (const p of products.value) {
+    const pid = String(unwrapText(p.id));
+    productById[pid] = p;
+  }
+
+  for (const order of orders.value) {
+    const rows = order.associations?.order_rows?.order_row;
+    if (!rows) continue;
+    const rowList = Array.isArray(rows) ? rows : [rows];
+    for (const row of rowList) {
+      const productId = String(unwrapText(row.product_id));
+      const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
+      const product = productById[productId];
+      if (product) {
+        const wholesalePrice = readNum(product.wholesale_price);
+        total += wholesalePrice * qty;
+      }
+    }
+  }
+  return total;
+});
+
+// --- Bénéfice global ---
+const totalProfit = computed(() => totalSales.value - totalPurchase.value);
+
+// --- Bénéfice par catégorie ---
+const profitByCategory = computed(() => {
+  // Index produit par id
+  const productById = {};
+  for (const p of products.value) {
+    const pid = String(unwrapText(p.id));
+    productById[pid] = p;
+  }
+
+  // Index catégorie par id
+  const categoryById = {};
+  for (const c of categories.value) {
+    const cid = String(unwrapText(c.id));
+    categoryById[cid] = extractName(c);
+  }
+
+  // Accumulateurs par catégorie : { catId: { name, sales, cost } }
+  const stats = {};
+
+  for (const order of orders.value) {
+    const rows = order.associations?.order_rows?.order_row;
+    if (!rows) continue;
+    const rowList = Array.isArray(rows) ? rows : [rows];
+
+    for (const row of rowList) {
+      const productId = String(unwrapText(row.product_id));
+      const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
+      const unitPrice = readNum(row.unit_price_tax_incl) || readNum(row.product_price);
+      const lineSales = unitPrice * qty;
+
+      const product = productById[productId];
+      const catId = product ? String(unwrapText(product.id_category_default) || '2') : '2';
+      const catName = categoryById[catId] || `Catégorie #${catId}`;
+      const wholesalePrice = product ? readNum(product.wholesale_price) : 0;
+      const lineCost = wholesalePrice * qty;
+
+      if (!stats[catId]) {
+        stats[catId] = { name: catName, sales: 0, cost: 0 };
+      }
+      stats[catId].sales += lineSales;
+      stats[catId].cost += lineCost;
+    }
+  }
+
+  return Object.values(stats)
+    .map(s => ({ ...s, profit: s.sales - s.cost }))
+    .sort((a, b) => b.profit - a.profit);
+});
+
 const dailyStats = computed(() => {
   const stats = {};
   orders.value.forEach(order => {
-    const dateStr = order.date_add?.['#text'] || order.date_add || '';
+    const dateStr = unwrapText(order.date_add) || '';
     const day = dateStr.split(' ')[0]; // On récupère juste YYYY-MM-DD
     if (!day) return;
 
@@ -51,7 +134,7 @@ const dailyStats = computed(() => {
       stats[day] = { count: 0, amount: 0 };
     }
     stats[day].count += 1;
-    stats[day].amount += parseFloat(order.total_paid?.['#text'] || order.total_paid || 0);
+    stats[day].amount += readNum(order.total_paid);
   });
   
   // Convertir l'objet en tableau et trier par date décroissante (le plus récent en haut)
@@ -84,6 +167,20 @@ onMounted(fetchStats);
         <router-link to="/orders" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Voir toutes les commandes →</router-link>
       </div>
 
+      <!-- Total Achat (Coût) -->
+      <div class="card">
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Achat (Coût)</div>
+        <p style="font-size: 2.5rem; font-weight: 800; color: #f59f00; margin: 0.5rem 0;">{{ totalPurchase.toFixed(2) }} €</p>
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Basé sur le prix d'achat (wholesale)</span>
+      </div>
+
+      <!-- Bénéfice Global -->
+      <div class="card">
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Bénéfice Global</div>
+        <p :style="{ fontSize: '2.5rem', fontWeight: 800, margin: '0.5rem 0', color: totalProfit >= 0 ? 'var(--success)' : '#e03131' }">{{ totalProfit.toFixed(2) }} €</p>
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Ventes − Coût d'achat</span>
+      </div>
+
       <!-- Nombre Total de commandes -->
       <div class="card">
         <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Commandes</div>
@@ -110,6 +207,41 @@ onMounted(fetchStats);
         <p style="font-size: 2.5rem; margin: 0.5rem 0;">📦</p>
         <router-link to="/stocks" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Gérer les quantités →</router-link>
       </div>
+    </div>
+
+    <!-- Section Bénéfice par Catégorie -->
+    <div class="card table-wrapper mb-2" style="padding: 0; overflow: hidden;">
+      <div class="card-header" style="padding: 1.5rem; margin: 0; background: rgba(0,0,0,0.2);">Bénéfice par catégorie de produit</div>
+      
+      <div v-if="loading" class="text-center text-muted" style="padding: 3rem; font-style: italic;">
+        <p>Chargement des données...</p>
+      </div>
+      <div v-else-if="profitByCategory.length === 0" class="text-center text-muted" style="padding: 3rem; font-style: italic;">
+        <p>Aucune donnée de vente par catégorie pour le moment.</p>
+      </div>
+      
+      <table v-else>
+        <thead>
+          <tr>
+            <th>Catégorie</th>
+            <th class="text-right">Ventes (TTC)</th>
+            <th class="text-right">Coût d'achat</th>
+            <th class="text-right">Bénéfice</th>
+            <th class="text-right">Marge</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="cat in profitByCategory" :key="cat.name">
+            <td><strong style="color: var(--text-main);">{{ cat.name }}</strong></td>
+            <td class="text-right">{{ cat.sales.toFixed(2) }} €</td>
+            <td class="text-right" style="color: #f59f00;">{{ cat.cost.toFixed(2) }} €</td>
+            <td class="text-right" :style="{ color: cat.profit >= 0 ? 'var(--success)' : '#e03131', fontWeight: 700, fontSize: '1.1rem' }">{{ cat.profit.toFixed(2) }} €</td>
+            <td class="text-right" :style="{ color: cat.sales > 0 ? (cat.profit >= 0 ? 'var(--success)' : '#e03131') : 'var(--text-muted)' }">
+              {{ cat.sales > 0 ? ((cat.profit / cat.sales) * 100).toFixed(1) : '0.0' }} %
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Section Historique par Jour en Tableau -->
@@ -147,4 +279,5 @@ onMounted(fetchStats);
 /* Les styles spécifiques ont été retirés pour utiliser le global style.css optimisé (Thème Dark Premium) */
 .align-center { align-items: center; }
 .justify-between { justify-content: space-between; }
+.text-right { text-align: right; }
 </style>
