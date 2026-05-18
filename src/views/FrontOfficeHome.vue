@@ -29,7 +29,7 @@ const readCartCount = async () => {
     const normalizedRows = Array.isArray(rows) ? rows : rows ? [rows] : []
 
     cartCount.value = normalizedRows.reduce((total, row) => {
-      return total + Number.parseInt(readTextValue(row?.quantity), 10)
+      return total + Number.parseInt(unwrapText(row?.quantity), 10)
     }, 0)
   } catch (cartError) {
     cartCount.value = 0
@@ -44,7 +44,7 @@ const loadCategories = async () => {
 
     categories.value = normalizedCategories
       .map((cat) => ({
-        id: String(readTextValue(cat.id)),
+        id: String(unwrapText(cat.id)),
         name: extractName(cat)
       }))
       .filter((c) => c.name && c.id !== '1' && c.id !== '2') // Souvent 1 et 2 sont root/home
@@ -62,15 +62,19 @@ const loadProducts = async () => {
     const rawProducts = response?.prestashop?.products?.product
     const normalizedProducts = Array.isArray(rawProducts) ? rawProducts : rawProducts ? [rawProducts] : []
 
-    const thirtyDaysAgo = new Date()
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
+    const oneWeekAgo = new Date()
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+    
+    const oneDayAgo = new Date()
+    oneDayAgo.setDate(oneDayAgo.getDate() - 1)
 
     products.value = normalizedProducts
       .filter((product) => String(unwrapText(product.active) || '1') === '1')
       .map((product) => {
         const dateAddStr = unwrapText(product.date_add)
-        const isNew = dateAddStr ? new Date(dateAddStr) >= thirtyDaysAgo : false
-        const isHot = String(unwrapText(product.on_sale)) === '1'
+        const dateAdd = dateAddStr ? new Date(dateAddStr) : null
+        const isHot = dateAdd ? dateAdd >= oneDayAgo : false
+        const isNew = dateAdd && !isHot ? dateAdd >= oneWeekAgo : false
 
         return {
           id: String(unwrapText(product.id)),

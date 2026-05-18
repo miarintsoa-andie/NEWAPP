@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
-import { prestashopApi, parseFileContent, extractName } from "../services/prestashopService";
+import { prestashopApi, parseFileContent, extractName, unwrapText } from "../services/prestashopService";
 
 const router = useRouter();
 const categories = ref([]);
@@ -22,9 +22,9 @@ const fetchCategories = async () => {
     if (data.prestashop?.categories?.category) {
       const rawList = data.prestashop.categories.category;
       categories.value = (Array.isArray(rawList) ? rawList : [rawList]).map(cat => ({
-        id: cat.id,
+        id: unwrapText(cat.id),
         name: extractName(cat),
-        active: cat.active === "1"
+        active: String(unwrapText(cat.active)) === "1"
       }));
     } else {
       categories.value = [];
