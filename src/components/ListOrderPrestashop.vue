@@ -4,7 +4,7 @@ import { prestashopApi, unwrapText, getList, updateOrderState as apiUpdateOrderS
 
 const orders = ref([]);
 const orderStates = ref([]);
-const statusOptions = ref([]);
+const statusOptions = ref([]); 
 const statusMissing = ref([]);
 const loading = ref(true);
 const error = ref(null);

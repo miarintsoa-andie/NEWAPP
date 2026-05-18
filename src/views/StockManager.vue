@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { prestashopApi, extractName, unwrapText, getList } from '../services/prestashopService'
 
 const products = ref([])
+const categories = ref({})
 const loading = ref(true)
 const error = ref('')
 
@@ -16,15 +17,23 @@ const loadData = async () => {
     loading.value = true
     error.value = ''
 
-    const [prodRes, stockRes, ordersRes] = await Promise.all([
+    const [prodRes, stockRes, ordersRes, catRes] = await Promise.all([
       prestashopApi.getAll('PRODUCTS'),
       prestashopApi.getAll('STOCK_AVAILABLES'),
-      prestashopApi.getAll('ORDERS')
+      prestashopApi.getAll('ORDERS'),
+      prestashopApi.getAll('CATEGORIES')
     ])
 
     const rawProducts = getList(prodRes, 'products')
     const rawStocks = getList(stockRes, 'stock_availables')
     const rawOrders = getList(ordersRes, 'orders')
+    const rawCategories = getList(catRes, 'categories')
+
+    const categoryById = {}
+    for (const c of rawCategories) {
+      categoryById[String(unwrapText(c.id))] = extractName(c)
+    }
+    categories.value = categoryById
 
     // Calculer les quantités réservées par produit
     // (commandes payées mais pas encore livrées ni annulées)
@@ -55,6 +64,7 @@ const loadData = async () => {
       return {
         id: prodId,
         name: extractName(p),
+        categoryId: String(unwrapText(p.id_category_default) || '2'),
         reference: unwrapText(p.reference) || `REF-${prodId}`,
         stockId: stockAssoc ? unwrapText(stockAssoc.id) : null,
         physical,
@@ -104,6 +114,21 @@ const updateStock = async (product) => {
   }
 }
 
+const stockByCategory = computed(() => {
+  const stats = {}
+  products.value.forEach(p => {
+    const catId = p.categoryId
+    const catName = categories.value[catId] || `Catégorie #${catId}`
+    if (!stats[catId]) {
+      stats[catId] = { name: catName, physical: 0, reserved: 0, available: 0 }
+    }
+    stats[catId].physical += p.physical
+    stats[catId].reserved += p.reserved
+    stats[catId].available += p.available
+  })
+  return Object.values(stats).sort((a, b) => a.name.localeCompare(b.name))
+})
+
 onMounted(loadData)
 </script>
 
@@ -120,6 +145,29 @@ onMounted(loadData)
     <div class="actions mb-2 flex gap-1">
       <router-link to="/dashboard" class="btn btn-outline">← Retour au tableau de bord</router-link>
       <button @click="loadData" class="btn btn-primary" style="margin-left: auto;">Rafraîchir les données</button>
+    </div>
+
+    <!-- Tableau de résumé par catégorie -->
+    <div v-if="!loading && stockByCategory.length" class="card mb-2" style="padding: 0; overflow: hidden;">
+      <div class="card-header" style="padding: 1.5rem; margin: 0; background: rgba(0,0,0,0.2);">Résumé des stocks par catégorie</div>
+      <table class="stock-table">
+        <thead>
+          <tr>
+            <th>Catégorie</th>
+            <th class="text-center col-physical">Qté physique</th>
+            <th class="text-center col-reserved">Qté reservé</th>
+            <th class="text-center col-available">Qté disponible</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="cat in stockByCategory" :key="cat.name">
+            <td><strong style="color: var(--text-main);">{{ cat.name }}</strong></td>
+            <td class="text-center"><span class="stock-badge stock-physical">{{ cat.physical }}</span></td>
+            <td class="text-center"><span class="stock-badge stock-reserved" :class="{ 'has-reserved': cat.reserved > 0 }">{{ cat.reserved }}</span></td>
+            <td class="text-center"><span class="stock-badge" :class="cat.available > 0 ? 'stock-ok' : 'stock-empty'">{{ cat.available }}</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- Légende des colonnes -->

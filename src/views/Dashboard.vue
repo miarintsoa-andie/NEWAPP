@@ -37,7 +37,8 @@ const readNum = (val) => parseFloat(unwrapText(val) || '0') || 0;
 
 const totalSales = computed(() => {
   return orders.value.reduce((sum, order) => {
-    return sum + readNum(order.total_paid);
+    // Utilisation de total_paid_tax_excl pour le HT
+    return sum + readNum(order.total_paid_tax_excl || order.total_paid);
   }, 0);
 });
 
@@ -101,7 +102,8 @@ const profitByCategory = computed(() => {
     for (const row of rowList) {
       const productId = String(unwrapText(row.product_id));
       const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
-      const unitPrice = readNum(row.unit_price_tax_incl) || readNum(row.product_price);
+      // Utilisation du prix HT pour la vente
+      const unitPrice = readNum(row.unit_price_tax_excl) || readNum(row.product_price);
       const lineSales = unitPrice * qty;
 
       const product = productById[productId];
@@ -134,7 +136,8 @@ const dailyStats = computed(() => {
       stats[day] = { count: 0, amount: 0 };
     }
     stats[day].count += 1;
-    stats[day].amount += readNum(order.total_paid);
+    // Utilisation du CA HT pour les statistiques journalières
+    stats[day].amount += readNum(order.total_paid_tax_excl || order.total_paid);
   });
   
   // Convertir l'objet en tableau et trier par date décroissante (le plus récent en haut)
@@ -162,16 +165,16 @@ onMounted(fetchStats);
     <div class="grid mb-2" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem;">
       <!-- Total Ventes -->
       <div class="card">
-        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Général Ventes</div>
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Ventes (HT)</div>
         <p style="font-size: 2.5rem; font-weight: 800; color: var(--accent-primary); margin: 0.5rem 0;">{{ totalSales.toFixed(2) }} €</p>
         <router-link to="/orders" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Voir toutes les commandes →</router-link>
       </div>
 
       <!-- Total Achat (Coût) -->
       <div class="card">
-        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Achat (Coût)</div>
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Achat (HT)</div>
         <p style="font-size: 2.5rem; font-weight: 800; color: #f59f00; margin: 0.5rem 0;">{{ totalPurchase.toFixed(2) }} €</p>
-        <span style="color: var(--text-muted); font-size: 0.85rem;">Basé sur le prix d'achat (wholesale)</span>
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Basé sur le prix d'achat HT</span>
       </div>
 
       <!-- Bénéfice Global -->
@@ -224,8 +227,8 @@ onMounted(fetchStats);
         <thead>
           <tr>
             <th>Catégorie</th>
-            <th class="text-right">Ventes (TTC)</th>
-            <th class="text-right">Coût d'achat</th>
+            <th class="text-right">Ventes (HT)</th>
+            <th class="text-right">Coût d'achat (HT)</th>
             <th class="text-right">Bénéfice</th>
             <th class="text-right">Marge</th>
           </tr>
@@ -260,7 +263,7 @@ onMounted(fetchStats);
           <tr>
             <th>Date</th>
             <th>Nombre de commandes</th>
-            <th>Chiffre d'affaires Généré</th>
+            <th>Chiffre d'affaires (HT)</th>
           </tr>
         </thead>
         <tbody>
