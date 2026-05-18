@@ -5,12 +5,102 @@
 import { rawApi } from './prestashopService';
 
 const ID_COUNTRY = 8;
-const ID_CURRENCY = 2;
-const ID_LANG = 2;
+const ID_CURRENCY_FALLBACK = '1';
+const ID_LANG_FALLBACK = '2';
 const PAYMENT_MODULE = 'ps_cashondelivery';
 const PAYMENT_METHOD = 'paiement_livraison';
 
 const COLONNES_REQUISES = ['date', 'nom', 'email', 'pwd', 'adresse', 'achat', 'etat'];
+
+const normalizeText = (text) => {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+};
+
+const formatDateForPrestashop = (dateStr) => {
+  if (!dateStr) return '';
+  const trimmed = String(dateStr).trim();
+  const match = trimmed.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return '';
+  const [, dd, mm, yyyy] = match;
+  return `${yyyy}-${mm}-${dd} 00:00:00`;
+};
+
+const configurationCache = {};
+const fetchConfigurationValue = async (name) => {
+  if (configurationCache[name]) return configurationCache[name];
+  const response = await rawApi.get(`/configurations?filter[name]=[${encodeURIComponent(name)}]&display=full`);
+  const doc = new DOMParser().parseFromString(response.data, 'text/xml');
+  const value = doc.querySelector('configuration value')?.textContent?.trim() || '';
+  configurationCache[name] = value;
+  return value;
+};
+
+const getDefaultLangId = async () => {
+  const value = await fetchConfigurationValue('PS_LANG_DEFAULT');
+  return value || ID_LANG_FALLBACK;
+};
+
+const getDefaultCurrencyId = async () => {
+  const value = await fetchConfigurationValue('PS_CURRENCY_DEFAULT');
+  return value || ID_CURRENCY_FALLBACK;
+};
+
+let cachedOrderStates = null;
+
+const extractOrderStateName = (stateNode) => {
+  if (!stateNode) return '';
+  const nameNode = stateNode.querySelector('name');
+  if (!nameNode) return '';
+  const langNode = nameNode.querySelector('language');
+  return (langNode?.textContent || nameNode.textContent || '').trim();
+};
+
+const loadOrderStates = async () => {
+  if (cachedOrderStates) return cachedOrderStates;
+  const response = await rawApi.get('/order_states?display=full');
+  const doc = new DOMParser().parseFromString(response.data, 'text/xml');
+  const nodes = Array.from(doc.getElementsByTagName('order_state'));
+  cachedOrderStates = nodes.map((node) => ({
+    id: node.getElementsByTagName('id')[0]?.textContent?.trim() || '',
+    name: extractOrderStateName(node)
+  })).filter((state) => state.id && state.name);
+  return cachedOrderStates;
+};
+
+const resolveOrderStateIdFromCsv = async (etat) => {
+  const normalizedEtat = normalizeText(etat);
+  if (!normalizedEtat) return '';
+
+  let keywords = [];
+  if (normalizedEtat.includes('accepte')) {
+    keywords = ['paiement', 'accepte'];
+  } else if (normalizedEtat.includes('attente')) {
+    keywords = ['attente'];
+  } else if (normalizedEtat.includes('erreur') || normalizedEtat.includes('refuse')) {
+    keywords = ['erreur'];
+  } else if (normalizedEtat.includes('annule')) {
+    keywords = ['annule'];
+  }
+
+  const states = await loadOrderStates();
+  const match = states.find((state) => {
+    const normalizedName = normalizeText(state.name);
+    return keywords.length > 0 && keywords.every((kw) => normalizedName.includes(kw));
+  });
+
+  if (match) return match.id;
+
+  const directMatch = states.find((state) => normalizeText(state.name).includes(normalizedEtat));
+  return directMatch?.id || '';
+};
+
+const isEtatPaiementAccepte = (etat) => {
+  return normalizeText(etat).includes('accepte');
+};
 
 export const validerCSVCommandes = (rows) => {
   if (!rows || rows.length === 0) throw new Error('Le fichier CSV Commandes est vide.');
@@ -116,12 +206,13 @@ const obtenirOuCreerClient = async (nom, email, pwd, registre) => {
   const parts = nom.split(' ');
   const firstname = parts[0] || 'Client';
   const lastname = parts.slice(1).join(' ') || nom;
+  const langId = await getDefaultLangId();
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
   <customer>
     <active><![CDATA[1]]></active>
     <id_default_group><![CDATA[3]]></id_default_group>
-    <id_lang><![CDATA[${ID_LANG}]]></id_lang>
+    <id_lang><![CDATA[${langId}]]></id_lang>
     <firstname><![CDATA[${firstname}]]></firstname>
     <lastname><![CDATA[${lastname}]]></lastname>
     <email><![CDATA[${email}]]></email>
@@ -169,6 +260,8 @@ const obtenirSecureKey = async (customerId) => {
 };
 
 const creerPanier = async (idCustomer, idAddress, items, registre) => {
+  const langId = await getDefaultLangId();
+  const currencyId = await getDefaultCurrencyId();
   let cartRowsXml = '';
   for (const item of items) {
     const idProduct = await obtenirIdProduit(item.reference);
@@ -182,8 +275,8 @@ const creerPanier = async (idCustomer, idAddress, items, registre) => {
     <id_carrier><![CDATA[1]]></id_carrier>
     <id_address_delivery><![CDATA[${idAddress}]]></id_address_delivery>
     <id_address_invoice><![CDATA[${idAddress}]]></id_address_invoice>
-    <id_currency><![CDATA[${ID_CURRENCY}]]></id_currency>
-    <id_lang><![CDATA[${ID_LANG}]]></id_lang>
+    <id_currency><![CDATA[${currencyId}]]></id_currency>
+    <id_lang><![CDATA[${langId}]]></id_lang>
     <associations><cart_rows>${cartRowsXml}</cart_rows></associations>
   </cart>
 </prestashop>`;
@@ -194,7 +287,7 @@ const creerPanier = async (idCustomer, idAddress, items, registre) => {
   return newId;
 };
 
-const creerCommande = async (idCart, idCustomer, idAddress, items, registre) => {
+const creerCommande = async (idCart, idCustomer, idAddress, items, registre, orderStateId, orderDate, isValid) => {
   const secureKey = await obtenirSecureKey(idCustomer);
   await new Promise(r => setTimeout(r, 2000));
 
@@ -247,17 +340,21 @@ const creerCommande = async (idCart, idCustomer, idAddress, items, registre) => 
   const fHT = totalHT.toFixed(6);
   const fTTC = totalTTC.toFixed(6);
 
+  const langId = await getDefaultLangId();
+  const currencyId = await getDefaultCurrencyId();
+  const dateXml = orderDate ? `\n    <date_add><![CDATA[${orderDate}]]></date_add>\n    <date_upd><![CDATA[${orderDate}]]></date_upd>` : '';
+
   const orderXml = `<?xml version="1.0" encoding="UTF-8"?>
 <prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
   <order>
     <id_address_delivery><![CDATA[${idAddress}]]></id_address_delivery>
     <id_address_invoice><![CDATA[${idAddress}]]></id_address_invoice>
     <id_cart><![CDATA[${idCart}]]></id_cart>
-    <id_currency><![CDATA[${ID_CURRENCY}]]></id_currency>
-    <id_lang><![CDATA[${ID_LANG}]]></id_lang>
+    <id_currency><![CDATA[${currencyId}]]></id_currency>
+    <id_lang><![CDATA[${langId}]]></id_lang>
     <id_customer><![CDATA[${idCustomer}]]></id_customer>
     <id_carrier><![CDATA[1]]></id_carrier>
-    <current_state><![CDATA[2]]></current_state>
+    <current_state><![CDATA[${orderStateId}]]></current_state>${dateXml}
     <module>${PAYMENT_MODULE}</module>
     <payment>${PAYMENT_METHOD}</payment>
     <conversion_rate><![CDATA[1.000000]]></conversion_rate>
@@ -274,7 +371,7 @@ const creerCommande = async (idCart, idCustomer, idAddress, items, registre) => 
     <total_shipping_tax_incl><![CDATA[0.000000]]></total_shipping_tax_incl>
     <total_shipping_tax_excl><![CDATA[0.000000]]></total_shipping_tax_excl>
     <secure_key><![CDATA[${secureKey}]]></secure_key>
-    <valid><![CDATA[1]]></valid>
+    <valid><![CDATA[${isValid ? 1 : 0}]]></valid>
   </order>
 </prestashop>`;
 
@@ -306,7 +403,27 @@ export const importerCommandes = async (commandesTraitees, onProgress) => {
       const idCart = await creerPanier(idCustomer, idAddress, items, registre);
       cmd.id_cart = idCart;
 
-      const result = await creerCommande(idCart, idCustomer, idAddress, items, registre);
+      const orderStateId = await resolveOrderStateIdFromCsv(cmd.etat);
+      if (!orderStateId) {
+        throw new Error(`Etat commande introuvable pour: "${cmd.etat}"`);
+      }
+
+      const orderDate = formatDateForPrestashop(cmd.date);
+      if (!orderDate) {
+        throw new Error(`Date commande invalide: "${cmd.date}" (attendu DD/MM/YYYY)`);
+      }
+
+      const isValid = isEtatPaiementAccepte(cmd.etat);
+      const result = await creerCommande(
+        idCart,
+        idCustomer,
+        idAddress,
+        items,
+        registre,
+        orderStateId,
+        orderDate,
+        isValid
+      );
       cmd.id_order = result.id;
       cmd.status = 'success';
       successCount++;

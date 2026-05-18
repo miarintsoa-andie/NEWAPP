@@ -14,9 +14,17 @@ export const parseRawCsv = (text) => {
     const values = [];
     let current = '';
     let inQuotes = false;
-    for (const char of line) {
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+
       if (char === '"') {
-        inQuotes = !inQuotes;
+        if (nextChar === '"') {
+          current += '"';
+          i += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
       } else if (char === separator && !inQuotes) {
         values.push(current.trim());
         current = '';
