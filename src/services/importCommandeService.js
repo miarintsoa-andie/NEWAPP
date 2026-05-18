@@ -71,6 +71,36 @@ const loadOrderStates = async () => {
   return cachedOrderStates;
 };
 
+const ensureDateNode = (doc, nodeName) => {
+  let node = doc.querySelector(nodeName);
+  if (!node) {
+    const orderNode = doc.querySelector('order');
+    if (!orderNode) return null;
+    node = doc.createElement(nodeName);
+    orderNode.appendChild(node);
+  }
+  return node;
+};
+
+const updateOrderDates = async (orderId, orderDate) => {
+  if (!orderId || !orderDate) return;
+
+  const response = await rawApi.get(`/orders/${orderId}?output_format=XML`);
+  const doc = new DOMParser().parseFromString(response.data, 'text/xml');
+
+  const dateAdd = ensureDateNode(doc, 'date_add');
+  const dateUpd = ensureDateNode(doc, 'date_upd');
+  if (!dateAdd || !dateUpd) {
+    throw new Error('Impossible de definir date_add/date_upd sur la commande');
+  }
+
+  dateAdd.textContent = orderDate;
+  dateUpd.textContent = orderDate;
+
+  const xml = new XMLSerializer().serializeToString(doc);
+  await rawApi.put(`/orders/${orderId}`, xml, { headers: { 'Content-Type': 'text/xml; charset=utf-8' } });
+};
+
 const resolveOrderStateIdFromCsv = async (etat) => {
   const normalizedEtat = normalizeText(etat);
   if (!normalizedEtat) return '';
@@ -379,6 +409,7 @@ const creerCommande = async (idCart, idCustomer, idAddress, items, registre, ord
   const orderDoc = new DOMParser().parseFromString(response.data, 'text/xml');
   const orderId = orderDoc.querySelector('order id')?.textContent?.trim() || orderDoc.getElementsByTagName('id')[0]?.textContent?.trim();
   if (!orderId) throw new Error('ID commande introuvable');
+  await updateOrderDates(orderId, orderDate);
   registre.push({ type: 'order', id: orderId });
   return { id: orderId, totalHT: fHT, totalTTC: fTTC };
 };
