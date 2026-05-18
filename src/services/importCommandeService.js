@@ -105,13 +105,19 @@ const resolveOrderStateIdFromCsv = async (etat) => {
   const normalizedEtat = normalizeText(etat);
   if (!normalizedEtat || normalizedEtat.includes('panier')) return '';
 
+  // Mapping en dur des états demandés vers les IDs par défaut PrestaShop
+  if (normalizedEtat === 'paiement effectue' || normalizedEtat === 'paiement effecute') return '2';
+  if (normalizedEtat === 'livre') return '5';
+  if (normalizedEtat === 'annule') return '6';
+
   const states = await loadOrderStates();
   const exactMatch = states.find((state) => normalizeText(state.name) === normalizedEtat);
   return exactMatch?.id || '';
 };
 
 const isEtatPaiementAccepte = (etat) => {
-  return normalizeText(etat) === 'paiement effectue';
+  const norm = normalizeText(etat);
+  return norm === 'paiement effectue' || norm === 'paiement effecute' || norm === 'livre';
 };
 
 const applyOrderState = async (orderId, orderStateId) => {

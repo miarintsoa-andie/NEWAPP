@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from "vue";
-import { prestashopApi, unwrapText, getList } from "../services/prestashopService";
+import { prestashopApi, unwrapText, getList, updateOrderState as apiUpdateOrderState } from "../services/prestashopService";
 
 const orders = ref([]);
 const orderStates = ref([]);
@@ -120,12 +120,7 @@ const updateOrderState = async (orderId, newStateId) => {
   if (!newStateId) return;
   try {
     loading.value = true;
-    await prestashopApi.create("ORDER_HISTORIES", {
-      order_history: {
-        id_order: orderId,
-        id_order_state: newStateId
-      }
-    });
+    await apiUpdateOrderState(orderId, newStateId);
     await fetchOrders();
   } catch (err) {
     alert("Erreur lors du changement d'etat.");
@@ -133,6 +128,9 @@ const updateOrderState = async (orderId, newStateId) => {
     loading.value = false;
   }
 };
+
+const markAsDelivered = (orderId) => updateOrderState(orderId, 5);
+const markAsCanceled = (orderId) => updateOrderState(orderId, 6);
 
 /**
  * 2. SUPPRESSION D'UNE COMMANDE
@@ -258,8 +256,8 @@ onMounted(fetchOrders);
             </td>
             <td class="text-right">
               <div class="action-group">
-                <button class="action-btn">Détails</button>
-                <button @click="deleteOrder(ord.id)" class="action-btn btn-delete">Suppr.</button>
+                <button @click="markAsDelivered(ord.id)" class="action-btn" style="background: var(--success); color: white; border-color: var(--success);">Livrer</button>
+                <button @click="markAsCanceled(ord.id)" class="action-btn btn-delete">Annuler</button>
               </div>
             </td>
           </tr>

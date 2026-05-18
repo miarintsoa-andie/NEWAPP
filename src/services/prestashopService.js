@@ -237,7 +237,13 @@ export const unwrapText = (value) => {
 };
 
 export const getList = (data, type) => {
-  const list = data.prestashop?.[type]?.[type.slice(0, -1)];
+  let singular = type.slice(0, -1);
+  if (type === 'categories') singular = 'category';
+  else if (type === 'addresses') singular = 'address';
+  else if (type === 'countries') singular = 'country';
+  else if (type === 'order_histories') singular = 'order_history';
+  
+  const list = data.prestashop?.[type]?.[singular];
   return Array.isArray(list) ? list : (list ? [list] : []);
 };
 
@@ -598,6 +604,19 @@ export const frontOfficeLogin = async ({ email, password }) => {
     throw new Error(payload.message || "Connexion impossible.");
   }
   return payload.customer;
+};
+
+export const updateOrderState = async (id_order, id_order_state) => {
+  const response = await axios.post('/EVALUATION2026/tools/newapp_order_state.php', {
+    id_order: Number.parseInt(id_order),
+    id_order_state: Number.parseInt(id_order_state)
+  });
+  
+  const payload = response?.data || {};
+  if (!payload.ok) {
+    throw new Error(payload.message || "Erreur lors du changement d'état de la commande.");
+  }
+  return payload;
 };
 
 // 3. ACTIONS API GÉNÉRIQUES
