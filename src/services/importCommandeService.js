@@ -3,6 +3,7 @@
  * Adapté pour NewAPP - utilise rawApi de prestashopService
  */
 import { rawApi } from './prestashopService';
+import axios from 'axios';
 
 const ID_COUNTRY = 8;
 const ID_CURRENCY_FALLBACK = '1';
@@ -121,17 +122,15 @@ const isEtatPaiementAccepte = (etat) => {
 };
 
 const applyOrderState = async (orderId, orderStateId) => {
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-<prestashop xmlns:xlink="http://www.w3.org/1999/xlink">
-  <order_history>
-    <id_order><![CDATA[${orderId}]]></id_order>
-    <id_order_state><![CDATA[${orderStateId}]]></id_order_state>
-  </order_history>
-</prestashop>`;
-
-  await rawApi.post('/order_histories', xml, {
-    headers: { 'Content-Type': 'application/xml; charset=utf-8' }
+  const response = await axios.post('/EVALUATION2026/tools/newapp_order_state.php', {
+    id_order: Number.parseInt(orderId),
+    id_order_state: Number.parseInt(orderStateId)
   });
+
+  const payload = response?.data || {};
+  if (!payload.ok) {
+    console.error('applyOrderState error:', payload.message);
+  }
 };
 
 export const validerCSVCommandes = (rows) => {
