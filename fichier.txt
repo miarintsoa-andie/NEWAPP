@@ -1,0 +1,6 @@
+Rakoto
+
+1-import de photos ..case a cocher 
+mijery etat de commande en tant que client ,ajout d'un bouton creer une commande  
+2-dupliquer la commande ,misy champs anaovana anle duplication
+apres validation , mandalo ecran 1 hoe ao daholo reo sa tsy ampy ny stock , ary tsy afaka valider-na rehefa tsy ampy ny stocks ,rehefa valider-na dia tout de suite livre.

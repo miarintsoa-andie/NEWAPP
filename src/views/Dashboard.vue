@@ -184,9 +184,9 @@ const profitByCategory = computed(() => {
     for (const row of rowList) {
       const productId = String(unwrapText(row.product_id));
       const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
-      // Utilisation du prix HT pour la vente
-      const unitPrice = readNum(row.unit_price_tax_excl) || readNum(row.product_price);
-      const lineSales = unitPrice * qty;
+      // Utilisation stricte du prix HT pour la vente
+      const lineSales = readNum(row.total_price_tax_excl)
+        || (readNum(row.unit_price_tax_excl) * qty);
 
       const product = productById[productId];
       const catId = product ? String(unwrapText(product.id_category_default) || '2') : '2';
@@ -233,8 +233,8 @@ const profitByCategoryTTC = computed(() => {
       const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
       const lineSales = readNum(row.total_price_tax_incl)
         || (readNum(row.unit_price_tax_incl) * qty)
-        || (readNum(row.unit_price_tax_excl) * qty)
-        || (readNum(row.product_price) * qty);
+        || (readNum(row.total_price_tax_excl) * getRowTaxMultiplier(row))
+        || (readNum(row.unit_price_tax_excl) * qty * getRowTaxMultiplier(row));
 
       const product = productById[productId];
       const catId = product ? String(unwrapText(product.id_category_default) || '2') : '2';

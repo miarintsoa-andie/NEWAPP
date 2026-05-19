@@ -201,6 +201,20 @@ const obtenirIdProduit = async (reference) => {
   throw new Error(`Produit "${reference}" introuvable.`);
 };
 
+const obtenirProduitParReference = async (reference) => {
+  const res = await rawApi.get(`/products?filter[reference]=[${encodeURIComponent(reference)}]&display=full`);
+  const product = new DOMParser().parseFromString(res.data, 'application/xml').getElementsByTagName('product')[0];
+  if (!product) throw new Error(`Produit "${reference}" introuvable.`);
+  const id = product.getElementsByTagName('id')[0]?.textContent?.trim();
+  const price = product.getElementsByTagName('price')[0]?.textContent?.trim();
+  const idTRG = product.getElementsByTagName('id_tax_rules_group')[0]?.textContent?.trim();
+  return {
+    id: id || '',
+    priceHT: parseFloat(price || '0'),
+    idTaxRulesGroup: idTRG || ''
+  };
+};
+
 const obtenirIdDeclinaison = async (idProduct, karazany) => {
   if (!karazany) return 0;
   try {
@@ -327,13 +341,13 @@ const creerCommande = async (idCart, idCustomer, idAddress, items, registre, ord
   let totalTTC = 0;
   for (const item of items) {
     try {
-      const idProduct = await obtenirIdProduit(item.reference);
-      const prodRes = await rawApi.get(`/products/${idProduct}?output_format=XML`);
-      const prodDoc = new DOMParser().parseFromString(prodRes.data, 'text/xml');
-      let priceHT = parseFloat(prodDoc.querySelector('product price')?.textContent?.trim() || '0');
+      const product = await obtenirProduitParReference(item.reference);
+      const idProduct = product.id;
+      if (!idProduct) throw new Error(`ID produit introuvable pour la reference "${item.reference}"`);
+      let priceHT = product.priceHT;
       let taxRate = 20;
 
-      const idTRG = prodDoc.querySelector('product id_tax_rules_group')?.textContent?.trim();
+      const idTRG = product.idTaxRulesGroup;
       if (idTRG && idTRG !== '0') {
         try {
           const trRes = await rawApi.get(`/tax_rules?filter[id_tax_rules_group]=${idTRG}&display=[id_tax]`);
