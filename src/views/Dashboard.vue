@@ -33,12 +33,32 @@ const fetchStats = async () => {
 // --- Helper pour lire une valeur numérique ---
 const readNum = (val) => parseFloat(unwrapText(val) || '0') || 0;
 
+// --- Helper pour lire le montant HT d'une commande (fallback sécurisé) ---
+const readOrderHT = (order) => {
+  const ht = readNum(order.total_paid_tax_excl);
+  // Si le HT est 0 mais que total_paid est renseigné, on ne fallback PAS
+  // car 0 HT est une valeur valide (commande gratuite) — évite de mélanger HT/TTC
+  if (ht > 0) return ht;
+  // Seulement si total_paid_tax_excl n'existe pas du tout
+  if (order.total_paid_tax_excl === undefined || order.total_paid_tax_excl === null) {
+    return readNum(order.total_paid);
+  }
+  return ht;
+};
+
 // --- CALCULS DES STATISTIQUES ---
 
+// Commandes valides : exclure les commandes annulées (état 6)
+const validOrders = computed(() => {
+  return orders.value.filter(order => {
+    const state = parseInt(unwrapText(order.current_state) || '0', 10);
+    return state !== 6; // 6 = Annulé dans PrestaShop
+  });
+});
+
 const totalSales = computed(() => {
-  return orders.value.reduce((sum, order) => {
-    // Utilisation de total_paid_tax_excl pour le HT
-    return sum + readNum(order.total_paid_tax_excl || order.total_paid);
+  return validOrders.value.reduce((sum, order) => {
+    return sum + readOrderHT(order);
   }, 0);
 });
 
@@ -55,7 +75,7 @@ const totalPurchase = computed(() => {
     productById[pid] = p;
   }
 
-  for (const order of orders.value) {
+  for (const order of validOrders.value) {
     const rows = order.associations?.order_rows?.order_row;
     if (!rows) continue;
     const rowList = Array.isArray(rows) ? rows : [rows];
@@ -94,7 +114,7 @@ const profitByCategory = computed(() => {
   // Accumulateurs par catégorie : { catId: { name, sales, cost } }
   const stats = {};
 
-  for (const order of orders.value) {
+  for (const order of validOrders.value) {
     const rows = order.associations?.order_rows?.order_row;
     if (!rows) continue;
     const rowList = Array.isArray(rows) ? rows : [rows];
@@ -127,7 +147,7 @@ const profitByCategory = computed(() => {
 
 const dailyStats = computed(() => {
   const stats = {};
-  orders.value.forEach(order => {
+  validOrders.value.forEach(order => {
     const dateStr = unwrapText(order.date_add) || '';
     const day = dateStr.split(' ')[0]; // On récupère juste YYYY-MM-DD
     if (!day) return;
@@ -137,7 +157,7 @@ const dailyStats = computed(() => {
     }
     stats[day].count += 1;
     // Utilisation du CA HT pour les statistiques journalières
-    stats[day].amount += readNum(order.total_paid_tax_excl || order.total_paid);
+    stats[day].amount += readOrderHT(order);
   });
   
   // Convertir l'objet en tableau et trier par date décroissante (le plus récent en haut)
