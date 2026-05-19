@@ -46,6 +46,31 @@ const readOrderHT = (order) => {
   return ht;
 };
 
+// --- Helper pour lire le montant TTC d'une commande (fallback sécurisé) ---
+const readOrderTTC = (order) => {
+  const ttc = readNum(order.total_paid_tax_incl);
+  if (ttc > 0) return ttc;
+  if (order.total_paid_tax_incl === undefined || order.total_paid_tax_incl === null) {
+    return readNum(order.total_paid);
+  }
+  return ttc;
+};
+
+// --- Helper pour obtenir un multiplicateur de taxe à partir d'une ligne de commande ---
+const getRowTaxMultiplier = (row) => {
+  const excl = readNum(row.unit_price_tax_excl);
+  const incl = readNum(row.unit_price_tax_incl);
+  if (excl > 0 && incl > 0) {
+    return incl / excl;
+  }
+  const totalExcl = readNum(row.total_price_tax_excl);
+  const totalIncl = readNum(row.total_price_tax_incl);
+  if (totalExcl > 0 && totalIncl > 0) {
+    return totalIncl / totalExcl;
+  }
+  return 1;
+};
+
 // --- CALCULS DES STATISTIQUES ---
 
 // Commandes valides : exclure les commandes annulées (état 6)
@@ -59,6 +84,12 @@ const validOrders = computed(() => {
 const totalSales = computed(() => {
   return validOrders.value.reduce((sum, order) => {
     return sum + readOrderHT(order);
+  }, 0);
+});
+
+const totalSalesTTC = computed(() => {
+  return validOrders.value.reduce((sum, order) => {
+    return sum + readOrderTTC(order);
   }, 0);
 });
 
@@ -92,8 +123,39 @@ const totalPurchase = computed(() => {
   return total;
 });
 
+// --- Montant total d'achat (coût) TTC basé sur le prix d'achat HT + taux de taxe ligne ---
+const totalPurchaseTTC = computed(() => {
+  let total = 0;
+
+  const productById = {};
+  for (const p of products.value) {
+    const pid = String(unwrapText(p.id));
+    productById[pid] = p;
+  }
+
+  for (const order of validOrders.value) {
+    const rows = order.associations?.order_rows?.order_row;
+    if (!rows) continue;
+    const rowList = Array.isArray(rows) ? rows : [rows];
+    for (const row of rowList) {
+      const productId = String(unwrapText(row.product_id));
+      const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
+      const product = productById[productId];
+      if (product) {
+        const wholesalePrice = readNum(product.wholesale_price);
+        const taxMultiplier = getRowTaxMultiplier(row);
+        total += wholesalePrice * qty * taxMultiplier;
+      }
+    }
+  }
+  return total;
+});
+
 // --- Bénéfice global ---
 const totalProfit = computed(() => totalSales.value - totalPurchase.value);
+
+// --- Bénéfice global TTC ---
+const totalProfitTTC = computed(() => totalSalesTTC.value - totalPurchaseTTC.value);
 
 // --- Bénéfice par catégorie ---
 const profitByCategory = computed(() => {
@@ -131,6 +193,55 @@ const profitByCategory = computed(() => {
       const catName = categoryById[catId] || `Catégorie #${catId}`;
       const wholesalePrice = product ? readNum(product.wholesale_price) : 0;
       const lineCost = wholesalePrice * qty;
+
+      if (!stats[catId]) {
+        stats[catId] = { name: catName, sales: 0, cost: 0 };
+      }
+      stats[catId].sales += lineSales;
+      stats[catId].cost += lineCost;
+    }
+  }
+
+  return Object.values(stats)
+    .map(s => ({ ...s, profit: s.sales - s.cost }))
+    .sort((a, b) => b.profit - a.profit);
+});
+
+// --- Bénéfice par catégorie TTC ---
+const profitByCategoryTTC = computed(() => {
+  const productById = {};
+  for (const p of products.value) {
+    const pid = String(unwrapText(p.id));
+    productById[pid] = p;
+  }
+
+  const categoryById = {};
+  for (const c of categories.value) {
+    const cid = String(unwrapText(c.id));
+    categoryById[cid] = extractName(c);
+  }
+
+  const stats = {};
+
+  for (const order of validOrders.value) {
+    const rows = order.associations?.order_rows?.order_row;
+    if (!rows) continue;
+    const rowList = Array.isArray(rows) ? rows : [rows];
+
+    for (const row of rowList) {
+      const productId = String(unwrapText(row.product_id));
+      const qty = parseInt(unwrapText(row.product_quantity) || '1', 10) || 1;
+      const lineSales = readNum(row.total_price_tax_incl)
+        || (readNum(row.unit_price_tax_incl) * qty)
+        || (readNum(row.unit_price_tax_excl) * qty)
+        || (readNum(row.product_price) * qty);
+
+      const product = productById[productId];
+      const catId = product ? String(unwrapText(product.id_category_default) || '2') : '2';
+      const catName = categoryById[catId] || `Catégorie #${catId}`;
+      const wholesalePrice = product ? readNum(product.wholesale_price) : 0;
+      const taxMultiplier = getRowTaxMultiplier(row);
+      const lineCost = wholesalePrice * qty * taxMultiplier;
 
       if (!stats[catId]) {
         stats[catId] = { name: catName, sales: 0, cost: 0 };
@@ -190,6 +301,13 @@ onMounted(fetchStats);
         <router-link to="/orders" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Voir toutes les commandes →</router-link>
       </div>
 
+      <!-- Total Ventes TTC -->
+      <div class="card">
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Ventes (TTC)</div>
+        <p style="font-size: 2.5rem; font-weight: 800; color: var(--accent-primary); margin: 0.5rem 0;">{{ totalSalesTTC.toFixed(2) }} €</p>
+        <router-link to="/orders" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Voir toutes les commandes →</router-link>
+      </div>
+
       <!-- Total Achat (Coût) -->
       <div class="card">
         <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Achat (HT)</div>
@@ -197,11 +315,25 @@ onMounted(fetchStats);
         <span style="color: var(--text-muted); font-size: 0.85rem;">Basé sur le prix d'achat HT</span>
       </div>
 
+      <!-- Total Achat (Coût) TTC -->
+      <div class="card">
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Total Achat (TTC)</div>
+        <p style="font-size: 2.5rem; font-weight: 800; color: #f59f00; margin: 0.5rem 0;">{{ totalPurchaseTTC.toFixed(2) }} €</p>
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Basé sur le prix d'achat HT + taxe</span>
+      </div>
+
       <!-- Bénéfice Global -->
       <div class="card">
         <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Bénéfice Global</div>
         <p :style="{ fontSize: '2.5rem', fontWeight: 800, margin: '0.5rem 0', color: totalProfit >= 0 ? 'var(--success)' : '#e03131' }">{{ totalProfit.toFixed(2) }} €</p>
         <span style="color: var(--text-muted); font-size: 0.85rem;">Ventes − Coût d'achat</span>
+      </div>
+
+      <!-- Bénéfice Global TTC -->
+      <div class="card">
+        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Bénéfice Global (TTC)</div>
+        <p :style="{ fontSize: '2.5rem', fontWeight: 800, margin: '0.5rem 0', color: totalProfitTTC >= 0 ? 'var(--success)' : '#e03131' }">{{ totalProfitTTC.toFixed(2) }} €</p>
+        <span style="color: var(--text-muted); font-size: 0.85rem;">Ventes TTC − Coût TTC</span>
       </div>
 
       <!-- Nombre Total de commandes -->
@@ -248,6 +380,41 @@ onMounted(fetchStats);
         </thead>
         <tbody>
           <tr v-for="cat in profitByCategory" :key="cat.name">
+            <td><strong style="color: var(--text-main);">{{ cat.name }}</strong></td>
+            <td class="text-right">{{ cat.sales.toFixed(2) }} €</td>
+            <td class="text-right" style="color: #f59f00;">{{ cat.cost.toFixed(2) }} €</td>
+            <td class="text-right" :style="{ color: cat.profit >= 0 ? 'var(--success)' : '#e03131', fontWeight: 700, fontSize: '1.1rem' }">{{ cat.profit.toFixed(2) }} €</td>
+            <td class="text-right" :style="{ color: cat.sales > 0 ? (cat.profit >= 0 ? 'var(--success)' : '#e03131') : 'var(--text-muted)' }">
+              {{ cat.sales > 0 ? ((cat.profit / cat.sales) * 100).toFixed(1) : '0.0' }} %
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Section Bénéfice par Catégorie TTC -->
+    <div class="card table-wrapper mb-2" style="padding: 0; overflow: hidden;">
+      <div class="card-header" style="padding: 1.5rem; margin: 0; background: rgba(0,0,0,0.2);">Bénéfice par catégorie de produit (TTC)</div>
+
+      <div v-if="loading" class="text-center text-muted" style="padding: 3rem; font-style: italic;">
+        <p>Chargement des données...</p>
+      </div>
+      <div v-else-if="profitByCategoryTTC.length === 0" class="text-center text-muted" style="padding: 3rem; font-style: italic;">
+        <p>Aucune donnée de vente par catégorie pour le moment.</p>
+      </div>
+
+      <table v-else>
+        <thead>
+          <tr>
+            <th>Catégorie</th>
+            <th class="text-right">Ventes (TTC)</th>
+            <th class="text-right">Coût d'achat (TTC)</th>
+            <th class="text-right">Bénéfice</th>
+            <th class="text-right">Marge</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="cat in profitByCategoryTTC" :key="`${cat.name}-ttc`">
             <td><strong style="color: var(--text-main);">{{ cat.name }}</strong></td>
             <td class="text-right">{{ cat.sales.toFixed(2) }} €</td>
             <td class="text-right" style="color: #f59f00;">{{ cat.cost.toFixed(2) }} €</td>
