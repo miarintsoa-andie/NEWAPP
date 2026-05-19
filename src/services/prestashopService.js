@@ -229,9 +229,19 @@ export const unwrapText = (value) => {
     if (value["#text"] !== undefined) return value["#text"];
     if (value.language) {
       const lang = value.language;
-      if (Array.isArray(lang)) return lang[0]?.["#text"] || lang[0];
-      return lang["#text"] || lang;
+      if (Array.isArray(lang)) {
+        const target = lang[0];
+        if (target && typeof target === 'object') {
+          return target["#text"] !== undefined ? target["#text"] : "";
+        }
+        return target || "";
+      }
+      if (lang && typeof lang === 'object') {
+        return lang["#text"] !== undefined ? lang["#text"] : "";
+      }
+      return lang || "";
     }
+    return ""; // Si c'est un objet inconnu sans #text ou sans language, on retourne une chaîne vide au lieu de [object Object]
   }
   return value;
 };

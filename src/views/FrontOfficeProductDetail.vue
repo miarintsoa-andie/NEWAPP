@@ -131,7 +131,8 @@ onMounted(async () => {
     <main class="fo-container">
       <div style="margin-bottom: 2rem;">
         <button type="button" @click="router.push({ name: 'FrontOfficeHome' })" style="background: none; border: none; font-weight: 700; color: var(--fo-text-muted); cursor: pointer; display: flex; align-items: center; gap: 0.5rem;">
-          ← Retour à la boutique
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Retour à la boutique
         </button>
       </div>
 
@@ -163,9 +164,15 @@ onMounted(async () => {
           <p class="fo-detail-price">{{ product.price.toFixed(2) }} EUR</p>
           
           <div>
-            <p :class="['fo-detail-stock', product.stockQuantity > 0 ? 'ok' : 'out']">
-              <span v-if="product.stockQuantity > 0">📦 En stock : <strong>{{ product.stockQuantity }} exemplaire(s)</strong></span>
-              <span v-else>⚠️ Rupture de stock</span>
+            <p :class="['fo-detail-stock', product.stockQuantity > 0 ? 'ok' : 'out']" style="display: flex; align-items: center; gap: 0.4rem;">
+              <span v-if="product.stockQuantity > 0" style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--success);"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                En stock : <strong>{{ product.stockQuantity }} exemplaire(s)</strong>
+              </span>
+              <span v-else style="display: flex; align-items: center; gap: 0.4rem;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: #e03131;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                Rupture de stock
+              </span>
             </p>
           </div>
 

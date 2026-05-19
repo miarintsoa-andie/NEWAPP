@@ -223,13 +223,6 @@ onMounted(fetchStats);
         <p style="font-size: 2.5rem; font-weight: 800; margin: 0.5rem 0;">{{ categories.length }}</p>
         <router-link to="/categories" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Organiser les rayons →</router-link>
       </div>
-
-      <!-- Stocks -->
-      <div class="card">
-        <div class="card-header" style="font-size: 0.9rem; text-transform: uppercase; color: var(--text-muted);">Stock & Inventaire</div>
-        <p style="font-size: 2.5rem; margin: 0.5rem 0;">📦</p>
-        <router-link to="/stocks" style="color: var(--text-muted); font-size: 0.85rem; text-decoration: none; display: inline-block; margin-top: 0.5rem;">Gérer les quantités →</router-link>
-      </div>
     </div>
 
     <!-- Section Bénéfice par Catégorie -->

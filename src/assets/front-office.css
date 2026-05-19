@@ -31,6 +31,7 @@
   top: 0;
   left: 0;
   width: 100%;
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.95);
   backdrop-filter: blur(10px);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
@@ -39,6 +40,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
 }
 
 .fo-navbar__brand {
@@ -53,8 +56,10 @@
 
 .fo-navbar__menu {
   display: flex;
-  gap: 1.5rem;
+  gap: 1rem;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .fo-navbar__link {
@@ -428,6 +433,21 @@
 }
 
 /* Responsive */
+@media (max-width: 1024px) {
+  .fo-navbar {
+    flex-direction: column;
+    padding: 1.25rem 1rem;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .fo-navbar__menu {
+    width: 100%;
+    justify-content: center;
+    gap: 0.75rem;
+  }
+}
+
 @media (max-width: 860px) {
   .fo-detail-card {
     grid-template-columns: 1fr;
@@ -435,11 +455,6 @@
 
   .fo-cart-layout {
     grid-template-columns: 1fr;
-  }
-
-  .fo-navbar {
-    flex-direction: column;
-    padding: 1rem;
   }
 }
 
@@ -830,9 +845,11 @@
     flex-direction: column;
     align-items: stretch;
   }
+
   .front-cart__items {
     max-width: 100%;
   }
+
   .front-cart__summary {
     width: 100%;
     position: static;
@@ -1186,4 +1203,51 @@
 .admin-link:hover {
   color: var(--fo-primary);
   background: #f0f7ff;
+}
+
+/* ==========================================================================
+   INTERACTIVE QUANTITY SELECTOR
+   ========================================================================== */
+.quantity-selector {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #cce0ff;
+  border-radius: 12px;
+  background: #f8fbff;
+  padding: 4px;
+  gap: 0.5rem;
+}
+
+.quantity-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: white;
+  color: var(--fo-text-main);
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.quantity-btn:hover:not(:disabled) {
+  background: var(--fo-primary);
+  color: white;
+  box-shadow: 0 4px 10px rgba(31, 111, 235, 0.2);
+}
+
+.quantity-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.quantity-value {
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--fo-text-main);
+  min-width: 24px;
+  text-align: center;
 }
