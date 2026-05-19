@@ -64,17 +64,26 @@ const loadProducts = async () => {
 
     const oneWeekAgo = new Date()
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+    oneWeekAgo.setHours(0, 0, 0, 0)
     
     const oneDayAgo = new Date()
     oneDayAgo.setDate(oneDayAgo.getDate() - 1)
+    oneDayAgo.setHours(0, 0, 0, 0)
+
+    const today = new Date()
+    today.setHours(23, 59, 59, 999)
 
     products.value = normalizedProducts
       .filter((product) => String(unwrapText(product.active) || '1') === '1')
       .map((product) => {
-        const dateAddStr = unwrapText(product.date_add)
-        const dateAdd = dateAddStr ? new Date(dateAddStr) : null
-        const isHot = dateAdd ? dateAdd >= oneDayAgo : false
-        const isNew = dateAdd && !isHot ? dateAdd >= oneWeekAgo : false
+        // Utiliser available_date (date de disponibilité du produit) pour HOT/NEW
+        const availDateStr = unwrapText(product.available_date)
+        const availDate = availDateStr && availDateStr !== '0000-00-00' ? new Date(availDateStr) : null
+
+        // HOT : produit sorti 1 jour avant la visite (date_availability entre hier et aujourd'hui)
+        const isHot = availDate ? (availDate >= oneDayAgo && availDate <= today) : false
+        // NEW : produit sorti dans la semaine précédente (mais pas HOT)
+        const isNew = availDate && !isHot ? (availDate >= oneWeekAgo && availDate <= today) : false
 
         return {
           id: String(unwrapText(product.id)),
